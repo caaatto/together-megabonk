@@ -12,11 +12,15 @@ namespace MegabonkTogether.Scripts.Snapshot
         private readonly List<EnemySnapshot> snapshotsBuffer = new List<EnemySnapshot>();
 
         protected float interpolationDelayMs = 0.1f;
-        protected int maxBufferSize = 200;
+        //Was 200, which is ~5s of history for a 0.1s interpolation delay. When the host falls behind,
+        //CleanupOldSnapshots drops nothing and FindSnapshotPair rescans the whole buffer every frame
+        //for every enemy while finding no pair at all. PlayerInterpolator and ProjectileInterpolator
+        //already use 30 for the same delay
+        protected int maxBufferSize = 30;
 
         protected void Update()
         {
-            if (!HasEnoughSnapshots())
+            if (enemy == null || !HasEnoughSnapshots())
                 return;
 
             double renderTime = Time.timeAsDouble - interpolationDelayMs;
@@ -49,6 +53,12 @@ namespace MegabonkTogether.Scripts.Snapshot
             if (!FindSnapshotPair(renderTime, out EnemySnapshot older, out EnemySnapshot newer))
                 return;
 
+            //This check used to sit after two dereferences of enemy.transform further down
+            if (enemy == null || enemy.transform == null)
+            {
+                return;
+            }
+
             enemy.hp = newer.Hp;
 
             float dist = Vector3.Distance(older.Position, newer.Position);
@@ -61,11 +71,6 @@ namespace MegabonkTogether.Scripts.Snapshot
 
             float t = CalculateInterpolationFactor(renderTime, older.Timestamp, newer.Timestamp);
             t = Mathf.Clamp01(t);
-
-            if (enemy.transform == null)
-            {
-                return;
-            }
 
             enemy.transform.position = Vector3.Lerp(older.Position, newer.Position, t);
             enemy.transform.rotation = Quaternion.Slerp(older.Rotation, newer.Rotation, t);
