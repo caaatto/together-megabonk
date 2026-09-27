@@ -2,7 +2,8 @@ using Assets.Scripts.Actors.Enemies;
 using MegabonkTogether.Services;
 using Microsoft.Extensions.DependencyInjection;
 using MonoMod.Utils;
-using System.Linq;
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MegabonkTogether.Scripts.Enemies
@@ -55,87 +56,155 @@ namespace MegabonkTogether.Scripts.Enemies
             switchMaxDistance = distance;
         }
 
+        /// <summary>
+        /// Players that can actually be chased right now.
+        ///
+        /// A player being alive in the player list is not enough: their NetPlayer may not be spawned yet
+        /// (level transition), may already be cleaned up, or may be hidden because they died. Following
+        /// one of those means chasing a stale position with nobody there, which is what "enemies go to
+        /// the wall" looks like, and dereferencing one throws.
+        /// </summary>
+        private List<(Transform transform, Rigidbody rigidBody, uint netplayId)> GetTargetableCandidates()
+        {
+            var candidates = new List<(Transform, Rigidbody, uint)>();
+
+            foreach (var player in playerManagerService.GetAllPlayersAlive())
+            {
+                if (player == null)
+                {
+                    continue;
+                }
+
+                if (playerManagerService.IsRemoteConnectionId(player.ConnectionId))
+                {
+                    var netplayer = playerManagerService.GetNetPlayerByNetplayId(player.ConnectionId);
+                    if (netplayer == null || netplayer.Model == null || netplayer.Rigidbody == null)
+                    {
+                        continue;
+                    }
+
+                    if (!netplayer.Model.activeSelf) //Hidden by NetPlayer.OnDied
+                    {
+                        continue;
+                    }
+
+                    candidates.Add((netplayer.Model.transform, netplayer.Rigidbody, player.ConnectionId));
+                }
+                else
+                {
+                    var localPlayer = GameManager.Instance?.player;
+                    if (localPlayer == null || localPlayer.playerMovement == null || localPlayer.playerMovement.rb == null)
+                    {
+                        continue;
+                    }
+
+                    candidates.Add((localPlayer.transform, localPlayer.playerMovement.rb, player.ConnectionId));
+                }
+            }
+
+            return candidates;
+        }
+
         private void PickANewTarget()
         {
-            var alives = playerManagerService.GetAllPlayersAlive().ToList();
-            if (alives.Count == 0) return;
-
-            var selectedPlayer = alives[Random.Range(0, alives.Count)];
-
-            if (playerManagerService.IsRemoteConnectionId(selectedPlayer.ConnectionId))
+            var candidates = GetTargetableCandidates();
+            if (candidates.Count == 0)
             {
-                var netplayer = playerManagerService.GetNetPlayerByNetplayId(selectedPlayer.ConnectionId);
-                currentTarget = (netplayer.Model.transform, netplayer.Rigidbody);
-            }
-            else
-            {
-                currentTarget = (GameManager.Instance.player.transform, GameManager.Instance.player.playerMovement.rb);
+                return;
             }
 
-            currentTargetNetplayId = selectedPlayer.ConnectionId;
+            var selected = candidates[UnityEngine.Random.Range(0, candidates.Count)];
+
+            currentTarget = (selected.transform, selected.rigidBody);
+            currentTargetNetplayId = selected.netplayId;
         }
 
         private void PickACloseTarget()
         {
-            var alives = playerManagerService.GetAllPlayersAlive().ToList();
-            if (alives.Count == 0) return;
+            var candidates = GetTargetableCandidates();
+            if (candidates.Count == 0 || enemy == null || enemy.transform == null)
+            {
+                return;
+            }
 
             var closestDistance = float.MaxValue;
             (Transform transform, Rigidbody rigidBody) closestTarget = (null, null);
-            
             uint closestNetplayId = 0;
-            foreach (var player in alives)
-            {
-                (Transform transform, Rigidbody rigidBody) target;
-                if (playerManagerService.IsRemoteConnectionId(player.ConnectionId))
-                {
-                    var netplayer = playerManagerService.GetNetPlayerByNetplayId(player.ConnectionId);
-                    target = (netplayer.Model.transform, netplayer.Rigidbody);
-                }
-                else
-                {
-                    target = (GameManager.Instance.player.transform, GameManager.Instance.player.playerMovement.rb);
-                }
 
-                var distance = Vector3.Distance(enemy.transform.position, target.transform.position);
+            var enemyPosition = enemy.transform.position;
+
+            foreach (var candidate in candidates)
+            {
+                var distance = Vector3.Distance(enemyPosition, candidate.transform.position);
                 if (distance < closestDistance)
                 {
                     closestDistance = distance;
-                    closestTarget = target;
-                    closestNetplayId = player.ConnectionId;
+                    closestTarget = (candidate.transform, candidate.rigidBody);
+                    closestNetplayId = candidate.netplayId;
                 }
             }
+
+            if (closestTarget.transform == null)
+            {
+                return;
+            }
+
             currentTarget = closestTarget;
             currentTargetNetplayId = closestNetplayId;
         }
 
         private void Update()
         {
-            if (enemy == null) return;
+            if (enemy == null || enemyData == null)
+            {
+                return;
+            }
 
             timer += Time.deltaTime;
-            if (timer >= delay)
+            if (timer < delay)
             {
-                if (!synchronizationService.HasNetplaySessionStarted()) return;
+                return;
+            }
 
-                PickANewTarget();
-                if (currentTarget.transform == null)
+            try
+            {
+                if (!synchronizationService.HasNetplaySessionStarted())
                 {
-                    ResetTimer();
                     return;
                 }
+
+                PickANewTarget();
+
+                if (currentTarget.transform == null)
+                {
+                    return;
+                }
+
                 if (CanSwitch())
                 {
                     enemyData.Set("targetId", currentTargetNetplayId);
                     enemy.target = currentTarget.rigidBody;
                 }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning($"TargetSwitcher could not pick a target: {ex.Message}");
+            }
+            finally
+            {
+                //Always rearm. This used to sit on the happy path only, so anything that threw or
+                //returned early left timer >= delay and the whole thing retried every single frame,
+                //for every enemy that has a switcher
                 ResetTimer();
             }
         }
 
         private bool CanSwitch()
         {
-            if (enemy.transform == null) return false;
+            if (enemy == null || enemy.transform == null || currentTarget.transform == null)
+            {
+                return false;
+            }
 
             float distance = Vector3.Distance(enemy.transform.position, currentTarget.transform.position);
             return distance <= switchMaxDistance;
@@ -144,7 +213,7 @@ namespace MegabonkTogether.Scripts.Enemies
         private void ResetTimer()
         {
             timer = 0f;
-            delay = Random.Range(switchIntervalRange.min, switchIntervalRange.max);
+            delay = UnityEngine.Random.Range(switchIntervalRange.min, switchIntervalRange.max);
         }
     }
 }
