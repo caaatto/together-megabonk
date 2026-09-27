@@ -73,6 +73,18 @@ namespace MegabonkTogether.Scripts
 
         public void Update()
         {
+            //Every block that suspends message sending begins and ends inside one synchronous call
+            //(verified: none of them contains a yield or an early return), so a flag that is still
+            //down at the start of a frame can only mean an exception escaped one of those blocks.
+            //Leaving it down silently stops this player from sending anything at all for the rest of
+            //the run, which looks exactly like the "everything desyncs and there is nothing in the
+            //log" reports
+            if (!Plugin.CAN_SEND_MESSAGES)
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+                Plugin.Log.LogWarning("Message sending was still suspended at the start of a frame, restoring it. An exception most likely escaped a CAN_SEND_MESSAGES block.");
+            }
+
             try
             {
                 if (udpClientService == null || synchronizationService == null) return;

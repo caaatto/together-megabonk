@@ -4517,10 +4517,16 @@ namespace MegabonkTogether.Services
 
         public void OnChangeGold(int amount)
         {
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null)
+            {
+                return;
+            }
+
             IGameNetworkMessage message = new GoldChanged
             {
                 Amount = amount,
-                OwnerId = playerManagerService.GetLocalPlayer().ConnectionId
+                OwnerId = localPlayer.ConnectionId
             };
 
             var isHost = IsServerMode() ?? false;
@@ -4537,8 +4543,14 @@ namespace MegabonkTogether.Services
         private void OnReceivedChangeGold(GoldChanged changed)
         {
             Plugin.CAN_SEND_MESSAGES = false;
-            GameManager.Instance.player.inventory.ChangeGold(changed.Amount);
-            Plugin.CAN_SEND_MESSAGES = true;
+            try
+            {
+                GameManager.Instance.player.inventory.ChangeGold(changed.Amount);
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
         }
     }
 }
