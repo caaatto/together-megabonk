@@ -135,7 +135,7 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 
 # Install
 
-This mod has only been developed and tested on windows, probably won't work on other platform (Is the game can even be run on Linux/Mac even ?)
+This mod is developed and tested on Windows. Linux is supported through **Proton** (see [Linux Support](#linux-support-proton--steam-deck)), including cross-play with Windows players. The **native** Linux build of the game does not work and cannot be made to work from this mod, see the section below for why. macOS is untested.
 
 Also this mod was developed for the 1.0.49 version (ok let me rant a bit, it was developed on previous update but Graveyard update broke some major stuff, i was a bit mad but its okay now, i fixed all the stuff), meaning it will probably break when an official major update drop .
 
@@ -206,7 +206,28 @@ To target a local server, modify the file `{your game path}/BepInEx/config/Megab
 
 # Linux Support (Proton / Steam Deck)
 
-The mod is compatible with Linux via **Proton**. Native Linux support is currently experimental and unstable due to BepInEx 6 compatibility issues with newer kernels (glibc/CET conflicts).
+The mod is compatible with Linux via **Proton**, which is required rather than merely recommended.
+
+## Why native Linux does not work
+
+The **native** Linux (ELF) build of the game is not supported, and not because of glibc or CET
+conflicts as previously stated here. Il2CppInterop locates IL2CPP's internal runtime functions by
+scanning for byte signatures derived from Windows PE builds. Against the ELF `GameAssembly.so`
+those patterns do not match, so it falls back to substitutes and then dereferences them:
+
+```
+[Warning:Il2CppInterop] Class::Init signatures have been exhausted, using a substitute!
+[Warning:Il2CppInterop] GarbageCollector::RunFinalizer not found, disabling Il2CppObjectPool
+Segmentation fault (core dumped)
+```
+
+Cpp2IL handles the ELF binary fine and all interop assemblies are generated, so the failure is not
+in the preloading step. The segfault happens in the chainloader, **before MegabonkTogether is
+loaded at all**, which is why no change in this mod can work around it. The blocker sits upstream in
+BepInEx's Il2CppInterop.
+
+Thanks to [@PapistProtocol](https://github.com/Fcornaire/megabonk-together/issues/97) for the analysis
+and the core dump that pinned this down.
 
 ## Installation
 
