@@ -18,6 +18,11 @@ namespace MegabonkTogether.Services
         public void RegisterTrack();
 
         public Tracks GetPlayerTrack();
+
+        /// <summary>
+        /// Drop any permit that was granted but never consumed
+        /// </summary>
+        public void Reset();
     }
 
     internal class TrackerService : ITrackerService
@@ -70,6 +75,17 @@ namespace MegabonkTogether.Services
         public Tracks GetPlayerTrack()
         {
             return playerTrack;
+        }
+
+        /// <summary>
+        /// These counters are one shot permits handed out per local kill and consumed by the stat, money
+        /// and item proc patches. They used to live for the whole game process, so leftovers from one
+        /// level or run leaked into the next one and the balance drifted further the longer people played
+        /// </summary>
+        public void Reset()
+        {
+            playerTrack = new();
+            currentPlayerId = null;
         }
     }
 }

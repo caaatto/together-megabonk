@@ -298,6 +298,7 @@ namespace MegabonkTogether.Services
             playerManagerService.Reset();
             enemyManagerService.ResetReviverSpawnCounts();
             encounterService.Reset();
+            trackerService.Reset();
 
             Plugin.Instance.HasDungeonTimerStarted = false;
         }
@@ -708,6 +709,7 @@ namespace MegabonkTogether.Services
 
         public void PrepareForNextLevel()
         {
+            trackerService.Reset();
             spawnedObjectManagerService.ResetForNextLevel();
             enemyManagerService.ResetForNextLevel();
             projectileManagerService.ResetForNextLevel();

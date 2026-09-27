@@ -105,8 +105,11 @@ namespace MegabonkTogether.Patches.Enemies
                 return;
             }
 
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null) { return; } //Runs for every single enemy death, an exception here is very expensive
+
             var currentTracker = trackerService.GetCurrentPlayerId();
-            if (currentTracker.HasValue && currentTracker.Value != playerManagerService.GetLocalPlayer().ConnectionId) { return; }
+            if (currentTracker.HasValue && currentTracker.Value != localPlayer.ConnectionId) { return; }
 
             trackerService.RegisterTrack();
         }
@@ -144,8 +147,11 @@ namespace MegabonkTogether.Patches.Enemies
                 return;
             }
 
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null) { return; } //Runs for every single enemy death, an exception here is very expensive
+
             var currentTracker = trackerService.GetCurrentPlayerId();
-            if (currentTracker.HasValue && currentTracker.Value != playerManagerService.GetLocalPlayer().ConnectionId) { return; }
+            if (currentTracker.HasValue && currentTracker.Value != localPlayer.ConnectionId) { return; }
 
             trackerService.RegisterTrack();
         }
