@@ -43,6 +43,20 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 <details>
 <summary>📋 Click to view full changelog</summary>
 
+### v5.2.0
+
+- 🔓 **Fixed the permanent soft lock on "Waiting for other player(s) choices..."**: confirmations are now counted per player instead of collected in a set that got cleared after every encounter, so a late confirmation, or one sent by a dead player, can no longer close an encounter somebody is still choosing in
+- 🛡️ **Added a host side failsafe**: if an encounter stays open too long the host closes it for everyone, so a lost packet cannot end the run. Tunable with `EncounterFailsafeTimeoutSeconds` (default 60s, 0 disables it)
+- 📦 **Fixed the soft lock when opening a second chest**: the chest window kept a null open button around, which crashed the game code on the next chest
+- 🧟 **Fixed enemies walking off towards nothing**: target switching crashed whenever a player was not spawned yet, already gone, or dead, and that crash made it retry every single frame for every enemy
+- 🔌 **Fixed silent network death**: a player could stop sending any message for the rest of the run after an error while applying a received one
+- 🔯 **Fixed shrine, pylon and boss lamp charging** crashing when you left the trigger without a matching start, for example after a level change
+- 📊 **Fixed kill counts and progression drifting apart** between players over a long session
+- 🚀 **Less wasted work in per enemy interpolation** when the host falls behind, which is when the frame rate used to collapse
+
+> [!IMPORTANT]
+> This version changes the network format, so every player in a session needs 5.2.0.
+
 ### v5.1.0
 
 - 🚀 **More code optimizations one more time !**
@@ -190,6 +204,10 @@ If you want to run your own matchmaking/relay server, check the [Self-Hosting Gu
 
 - For some obscure reason, The game crash when loading the map. this is mostly rare and you can just close and restart the game if it ever happen. Dunno why it sometimes crash here ¯\_(ツ)\_/¯
 - Not all the stuff happening in the game are perfectly synchronized, like getting money when you shouldn't or ghost item not spawning or whatever. I will mostly be looking for game breaking bug before looking at those
+- Progression, quests and Steam achievements are not synchronized yet. Saving during netplay is off by default and can be turned on with `AllowSavesDuringNetplay`
+- The graveyard final boss keeps its shield on guest clients even once all four lamps are charged
+- Frame rate still drops during the late swarms with several players. Some causes are fixed in 5.2.0 but this is not solved
+- Native Linux does not work, see [Linux Support](#linux-support-proton--steam-deck). Use Proton
 
 # Building (Developer)
 

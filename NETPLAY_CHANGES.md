@@ -31,6 +31,19 @@ You get i-frames when leveling up/getting a reward/openning a chest. This is to 
 > [!NOTE]  
 > You can also still move behind when selecting a reward
 
+### Encounter failsafe (Shared Experience)
+
+With Shared Experience the game really pauses while everyone chooses, so every player has to
+report back before the encounter can close. If one of those reports is lost, everybody used to
+sit on `Waiting for other player(s) choices...` with no way out but killing the game.
+
+The host now closes the encounter for everyone once it has been open for too long. The wait is
+set by `EncounterFailsafeTimeoutSeconds` in `{your game path}/BepInEx/config/MegabonkTogether.cfg`,
+defaults to 60 seconds, and `0` turns the failsafe off.
+
+The host is the one holding the timer on purpose. If every client closed on its own timer they
+would resume at different moments and desync instead of staying together.
+
 ## Disabled Save/Steam interaction
 
 The game naturally save progression and update your achievement. The game is not really meant to be played online so all of the save/steam interaction is prohibited when playing a netplay game.
