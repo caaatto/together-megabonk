@@ -16,6 +16,11 @@ namespace MegabonkTogether.Patches
         private static readonly ISynchronizationService synchronizationService = Plugin.Services.GetService<ISynchronizationService>();
         private static readonly IEncounterService encounterService = Plugin.Services.GetService<IEncounterService>();
 
+        //RewardFinished -> SynchronizationService.RewardFinished -> OnCloseEncounter -> RewardFinished
+        //is a real path on the host when it is the last player to choose, so this patch re-enters itself
+        private static bool isFinishingLocally = false;
+        private static bool wasFinishedByNestedCall = false;
+
         /// <summary>
         /// When changing level, the game will try to pop reward from previous stage missed
         /// This can freeze the game as the queue will get modified while iterating
@@ -163,6 +168,16 @@ namespace MegabonkTogether.Patches
                 return true;
             }
 
+            if (isFinishingLocally)
+            {
+                //Re-entered through our own RewardFinished -> OnCloseEncounter because every player was
+                //already done. Let the original run exactly once, here, and tell the outer call about it
+                wasFinishedByNestedCall = true;
+                ScreenTextHelper.Clear();
+                encounterService.ClearClosedEncounters();
+                return true;
+            }
+
             if (encounterService.IsClosable())
             {
                 ScreenTextHelper.Clear();
@@ -170,7 +185,25 @@ namespace MegabonkTogether.Patches
                 return true;
             }
 
-            synchronizationService.RewardFinished();
+            wasFinishedByNestedCall = false;
+            isFinishingLocally = true;
+            try
+            {
+                synchronizationService.RewardFinished();
+            }
+            finally
+            {
+                isFinishingLocally = false;
+            }
+
+            if (wasFinishedByNestedCall)
+            {
+                //We were the last one, the encounter is already over. Painting the overlay here is what
+                //left the host showing "Waiting for other player(s) choices..." while being free to move,
+                //which reads as a soft lock until you interact with something (issue #88)
+                wasFinishedByNestedCall = false;
+                return false;
+            }
 
             var ui = UiManager.Instance;
             ui.encounterWindows?.activeEncounterWindow?.gameObject.SetActive(false);
