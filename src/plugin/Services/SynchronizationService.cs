@@ -131,6 +131,7 @@ namespace MegabonkTogether.Services
         public void RewardFinished();
         public void TickEncounterFailsafe();
         public void SendTimersSynchronization();
+        public void OnBossLampStateChanged(uint lampNetplayId, bool isTurnedOn);
         public void OnChangeGold(int amount);
     }
     internal class SynchronizationService : ISynchronizationService
@@ -244,6 +245,7 @@ namespace MegabonkTogether.Services
             EventManager.SubscribeStoppingChargingLampEvents(OnReceivedStoppingChargingLamp);
             EventManager.SubscribeTimerStartedEvents(OnReceivedTimerStarted);
             EventManager.SubscribeTimersSynchronizedEvents(OnReceivedTimersSynchronized);
+            EventManager.SubscribeBossLampStateChangedEvents(OnReceivedBossLampStateChanged);
             EventManager.SubscribeHatChangedEvents(OnReceivedHatChanged);
             EventManager.SubscribeSpawnedReviverEvents(OnReceivedSpawnedReviver);
             EventManager.SubscribePlayerRespawnedEvents(OnReceivedPlayerRespawned);
@@ -4348,6 +4350,66 @@ namespace MegabonkTogether.Services
             }
 
             apply(hostValue);
+        }
+
+        /// <summary>
+        /// Host side. Tells everyone a graveyard boss lamp turned on or went out, so lampCount and with
+        /// it the boss armor stay identical on every client instead of being derived from a locally
+        /// rolled random deactivate timer
+        /// </summary>
+        public void OnBossLampStateChanged(uint lampNetplayId, bool isTurnedOn)
+        {
+            IGameNetworkMessage message = new BossLampStateChanged
+            {
+                LampNetplayId = lampNetplayId,
+                IsTurnedOn = isTurnedOn,
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
+        }
+
+        private void OnReceivedBossLampStateChanged(BossLampStateChanged state)
+        {
+            if (IsServerMode() ?? false)
+            {
+                return; //The host is where this comes from
+            }
+
+            var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(state.LampNetplayId);
+            if (spawnedObj == null)
+            {
+                logger.LogWarning("Lamp object not found in SpawnedObjectManagerService when processing OnReceivedBossLampStateChanged.");
+                return;
+            }
+
+            var lampObj = spawnedObj.GetComponent<BossLamp>();
+            if (lampObj == null)
+            {
+                logger.LogWarning("Lamp component not found on spawned object when processing OnReceivedBossLampStateChanged.");
+                return;
+            }
+
+            if (lampObj.isTurnedOn == state.IsTurnedOn)
+            {
+                return; //Already there, applying it again would move lampCount a second time
+            }
+
+            Plugin.CAN_SEND_MESSAGES = false;
+            try
+            {
+                if (state.IsTurnedOn)
+                {
+                    lampObj.Complete();
+                }
+                else
+                {
+                    lampObj.Deactivate();
+                }
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
         }
 
         public void OnHatChanged(EHat eHat)

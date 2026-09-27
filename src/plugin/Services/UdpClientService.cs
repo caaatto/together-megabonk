@@ -706,6 +706,9 @@ namespace MegabonkTogether.Services
                     case TimersSynchronized timersSynchronized:
                         EventManager.OnTimersSynchronized(timersSynchronized);
                         break;
+                    case BossLampStateChanged bossLampStateChanged:
+                        EventManager.OnBossLampStateChanged(bossLampStateChanged);
+                        break;
                     case HatChanged hatChanged:
                         EventManager.OnHatChanged(hatChanged);
                         break;

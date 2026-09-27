@@ -16,6 +16,7 @@ changes = [
     "Fixed shrine, pylon and boss lamp charging crashing when you left the trigger without a matching start, for example after a level change.",
     "Fixed kill counts and progression drifting apart between players over a long session.",
     "Reduced wasted work in the per enemy interpolation when the host falls behind, which is when the frame rate used to collapse.",
+    "Fixed the graveyard final boss keeping its shield for guests. Lamps going on and out is now decided by the host, so every player counts the same number of lit lamps and sees the same boss armor.",
     "The host now keeps everyone on the same run, stage, swarm, difficulty and crypt clock. They used to drift apart because a shared experience pause lasts a different amount of time for each player, so one player could be at 00:00 with the final swarm while another still had minutes left. Can be turned off with SynchronizeTimers.",
 ]
 

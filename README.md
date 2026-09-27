@@ -53,6 +53,7 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 - 🔯 **Fixed shrine, pylon and boss lamp charging** crashing when you left the trigger without a matching start, for example after a level change
 - 📊 **Fixed kill counts and progression drifting apart** between players over a long session
 - 🚀 **Less wasted work in per enemy interpolation** when the host falls behind, which is when the frame rate used to collapse
+- 💀 **Fixed the graveyard final boss keeping its shield for guests**: lamps turning on and going out is now decided by the host. A lamp goes out after a locally rolled random delay, so every player used to count a different number of lit lamps, and the boss armor is derived from that count
 - ⏱️ **Fixed the clocks drifting apart**: the host now keeps everyone on the same run, stage, swarm, difficulty and crypt timer. They diverged because a shared experience pause lasts a different amount of time for each player, so one player could sit at 00:00 with the final swarm while another still had minutes left. Turn off with `SynchronizeTimers`
 
 > [!IMPORTANT]
@@ -206,7 +207,6 @@ If you want to run your own matchmaking/relay server, check the [Self-Hosting Gu
 - For some obscure reason, The game crash when loading the map. this is mostly rare and you can just close and restart the game if it ever happen. Dunno why it sometimes crash here ¯\_(ツ)\_/¯
 - Not all the stuff happening in the game are perfectly synchronized, like getting money when you shouldn't or ghost item not spawning or whatever. I will mostly be looking for game breaking bug before looking at those
 - Progression, quests and Steam achievements are not synchronized yet. Saving during netplay is off by default and can be turned on with `AllowSavesDuringNetplay`
-- The graveyard final boss keeps its shield on guest clients even once all four lamps are charged
 - Frame rate still drops during the late swarms with several players. Some causes are fixed in 5.2.0 but this is not solved
 - Native Linux does not work, see [Linux Support](#linux-support-proton--steam-deck). Use Proton
 
