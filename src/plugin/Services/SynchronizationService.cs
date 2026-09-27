@@ -297,6 +297,7 @@ namespace MegabonkTogether.Services
             PrepareForNextLevel();
             playerManagerService.Reset();
             enemyManagerService.ResetReviverSpawnCounts();
+            encounterService.Reset();
 
             Plugin.Instance.HasDungeonTimerStarted = false;
         }
@@ -4398,15 +4399,26 @@ namespace MegabonkTogether.Services
 
         public void RewardFinished()
         {
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null)
+            {
+                logger.LogWarning("No local player while finishing a reward, cannot notify the other players.");
+                return;
+            }
+
+            //Claim the encounter we are resolving before evaluating whether everybody is done
+            var round = encounterService.RegisterLocalEncounterFinished();
+
             IGameNetworkMessage message = new EncounterClosed
             {
-                OwnerId = playerManagerService.GetLocalPlayer().ConnectionId,
+                OwnerId = localPlayer.ConnectionId,
+                CompletedCount = round,
             };
 
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                encounterService.AddClosedEncounterForPlayer(playerManagerService.GetLocalPlayer().ConnectionId);
+                encounterService.AddClosedEncounterForPlayer(localPlayer.ConnectionId, round);
 
                 if (encounterService.IsClosable())
                 {

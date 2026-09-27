@@ -985,7 +985,7 @@ namespace MegabonkTogether.Services
                         SendToAllClientsExcept(netPeerId, addXp.OwnerId, addXp);
                         break;
                     case EncounterClosed encounterClosed:
-                        encounterService.AddClosedEncounterForPlayer(encounterClosed.OwnerId);
+                        encounterService.AddClosedEncounterForPlayer(encounterClosed.OwnerId, encounterClosed.CompletedCount);
 
                         if (encounterService.IsClosable())
                         {
