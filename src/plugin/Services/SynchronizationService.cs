@@ -1898,7 +1898,8 @@ namespace MegabonkTogether.Services
             var netPlayer = playerManagerService.GetNetPlayerByNetplayId(player.PlayerId);
             if (netPlayer == null)
             {
-                if (player.PlayerId == playerManagerService.GetLocalPlayer().ConnectionId)
+                var localPlayer = playerManagerService.GetLocalPlayer();
+                if (localPlayer != null && player.PlayerId == localPlayer.ConnectionId)
                 {
                     target = GameManager.Instance.player.transform;
                 }
@@ -3698,9 +3699,28 @@ namespace MegabonkTogether.Services
         private void SpawnReviver(Vector3 position, Material[] materials, uint ownerConnectionId, uint reviverId = 0)
         {
             var desertGraves = EffectManager.Instance.desertGraves;
+            if (desertGraves == null || desertGraves.Count == 0)
+            {
+                logger.LogWarning("No desert grave prefab available, cannot spawn a reviver.");
+                return;
+            }
+
+            if (materials == null || materials.Length == 0)
+            {
+                logger.LogWarning("No materials available, cannot spawn a reviver.");
+                return;
+            }
+
             Plugin.CAN_SEND_MESSAGES = false;
-            var desertGraveInstance = GameObject.Instantiate(desertGraves[0], position, Quaternion.Euler(-90, 0, 0));
-            Plugin.CAN_SEND_MESSAGES = true;
+            GameObject desertGraveInstance;
+            try
+            {
+                desertGraveInstance = GameObject.Instantiate(desertGraves[0], position, Quaternion.Euler(-90, 0, 0));
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
             var interactable = desertGraveInstance.GetComponent<InteractableDesertGrave>();
             var chargeFx = GameObject.Instantiate(interactable.chargeFx, desertGraveInstance.transform);
             var explodeFx = GameObject.Instantiate(interactable.explodeFx, desertGraveInstance.transform);
@@ -3742,7 +3762,7 @@ namespace MegabonkTogether.Services
                 SpawnReviver(reviver.Position.ToUnityVector3(), player.GetActiveMaterials(), reviver.OwnerConnectionId, reviver.ReviverId);
 
             }
-            else if (reviver.OwnerConnectionId == playerManagerService.GetLocalPlayer().ConnectionId)
+            else if (reviver.OwnerConnectionId == playerManagerService.GetLocalPlayer()?.ConnectionId)
             {
                 SpawnReviver(reviver.Position.ToUnityVector3(), GameManager.Instance.player.playerRenderer.activeMaterials, reviver.OwnerConnectionId, reviver.ReviverId);
             }
