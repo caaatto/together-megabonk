@@ -291,6 +291,8 @@ namespace MegabonkTogether.Services
 
             shrineChargingPlayers.Clear();
             pylonChargingPlayers.Clear();
+            lampsChargingPlayers.Clear(); //Was missing, stale chargers survived into the next run and
+                                          //suppressed the lamp trigger there
             cancellationTokenSource.Cancel();
             cancellationTokenSource = new CancellationTokenSource();
             cancellationToken = cancellationTokenSource.Token;
@@ -2864,15 +2866,17 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrineNetplayId).Value;
-
-            shrineChargingPlayers[shrineNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-            if (chargers != null && chargers.Any())
+            //A stop can arrive without a matching start (level change, reset, dropped packet) and the
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, inside a trigger prefix
+            if (shrineChargingPlayers.TryGetValue(shrineNetplayId, out var chargers) && chargers != null)
             {
-                logger.LogInfo("Another player is still charging this shrine. Preventing stop trigger.");
-                return false;
+                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+
+                if (chargers.Any())
+                {
+                    logger.LogInfo("Another player is still charging this shrine. Preventing stop trigger.");
+                    return false;
+                }
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -2885,13 +2889,14 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrine.ShrineNetplayId).Value;
-                shrineChargingPlayers[shrine.ShrineNetplayId].Remove(shrine.PlayerChargingId);
-
-                if (chargers != null && chargers.Any())
+                if (shrineChargingPlayers.TryGetValue(shrine.ShrineNetplayId, out var chargers) && chargers != null)
                 {
-                    return;
+                    chargers.Remove(shrine.PlayerChargingId);
+
+                    if (chargers.Any())
+                    {
+                        return;
+                    }
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(shrine.ShrineNetplayId);
@@ -3258,15 +3263,17 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = pylonChargingPlayers.FirstOrDefault(p => p.Key == pylonNetplayId).Value;
-
-            pylonChargingPlayers[pylonNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-            if (chargers != null && chargers.Any())
+            //A stop can arrive without a matching start (level change, reset, dropped packet) and the
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, inside a trigger prefix
+            if (pylonChargingPlayers.TryGetValue(pylonNetplayId, out var chargers) && chargers != null)
             {
-                logger.LogInfo("Another player is still charging this pylon. Preventing stop trigger.");
-                return false;
+                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+
+                if (chargers.Any())
+                {
+                    logger.LogInfo("Another player is still charging this pylon. Preventing stop trigger.");
+                    return false;
+                }
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -3279,13 +3286,14 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = pylonChargingPlayers.FirstOrDefault(p => p.Key == pylon.PylonNetplayId).Value;
-                pylonChargingPlayers[pylon.PylonNetplayId].Remove(pylon.PlayerChargingId);
-
-                if (chargers != null && chargers.Any())
+                if (pylonChargingPlayers.TryGetValue(pylon.PylonNetplayId, out var chargers) && chargers != null)
                 {
-                    return;
+                    chargers.Remove(pylon.PlayerChargingId);
+
+                    if (chargers.Any())
+                    {
+                        return;
+                    }
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(pylon.PylonNetplayId);
@@ -3349,15 +3357,18 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = lampsChargingPlayers.FirstOrDefault(p => p.Key == lampNetplayId).Value;
-
-            lampsChargingPlayers[lampNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-            if (chargers != null && chargers.Any())
+            //A stop can arrive without a matching start (level change, reset, dropped packet). The
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, and this runs inside
+            //the BossLamp.OnTriggerExit prefix, so the lamp would be left half charged
+            if (lampsChargingPlayers.TryGetValue(lampNetplayId, out var chargers) && chargers != null)
             {
-                logger.LogInfo("Another player is still charging this lamp. Preventing stop trigger.");
-                return false;
+                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+
+                if (chargers.Any())
+                {
+                    logger.LogInfo("Another player is still charging this lamp. Preventing stop trigger.");
+                    return false;
+                }
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -3370,13 +3381,14 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = lampsChargingPlayers.FirstOrDefault(p => p.Key == lamp.LampNetplayId).Value;
-                lampsChargingPlayers[lamp.LampNetplayId].Remove(lamp.PlayerChargingId);
-
-                if (chargers != null && chargers.Any())
+                if (lampsChargingPlayers.TryGetValue(lamp.LampNetplayId, out var chargers) && chargers != null)
                 {
-                    return;
+                    chargers.Remove(lamp.PlayerChargingId);
+
+                    if (chargers.Any())
+                    {
+                        return;
+                    }
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(lamp.LampNetplayId);
