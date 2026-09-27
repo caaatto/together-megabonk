@@ -35,12 +35,17 @@ namespace MegabonkTogether.Patches
         }
 
         /// <summary>
-        /// Use remote player position when they are the one spawning the projectile
+        /// Use remote player position when they are the one spawning the projectile.
+        /// __state carries whether we queued something, so the postfix does not have to resolve the
+        /// netplayer a second time: the queue head redirects every PlayerStatsNew.GetStat call, so an
+        /// entry that never gets dequeued silently feeds another player's stats to this one
         /// </summary>
         [HarmonyPrefix]
         [HarmonyPatch(nameof(WeaponAttack.SpawnProjectile))]
-        public static void SpawnProjectile_Prefix(WeaponAttack __instance)
+        public static void SpawnProjectile_Prefix(WeaponAttack __instance, out bool __state)
         {
+            __state = false;
+
             if (!synchronizationService.HasNetplaySessionStarted())
             {
                 return;
@@ -53,7 +58,7 @@ namespace MegabonkTogether.Patches
             }
 
             playerManagerService.AddGetNetplayerPositionRequest(netplayer.ConnectionId);
-
+            __state = true;
         }
 
         /// <summary>
@@ -61,15 +66,9 @@ namespace MegabonkTogether.Patches
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(nameof(WeaponAttack.SpawnProjectile))]
-        public static void SpawnProjectile_Postfix(WeaponAttack __instance)
+        public static void SpawnProjectile_Postfix(WeaponAttack __instance, bool __state)
         {
-            if (!synchronizationService.HasNetplaySessionStarted())
-            {
-                return;
-            }
-
-            var netplayer = playerManagerService.GetNetPlayerByWeapon(__instance.weaponBase);
-            if (netplayer == null)
+            if (!__state)
             {
                 return;
             }
