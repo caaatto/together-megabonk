@@ -53,6 +53,7 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 - 🔯 **Fixed shrine, pylon and boss lamp charging** crashing when you left the trigger without a matching start, for example after a level change
 - 📊 **Fixed kill counts and progression drifting apart** between players over a long session
 - 🚀 **Less wasted work in per enemy interpolation** when the host falls behind, which is when the frame rate used to collapse
+- 🚪 **Fixed being stuck on "Waiting for other players" when loading a map**: that wait needed at least two players to ever finish, so if everybody else dropped during the load the game stayed paused on that screen with no way out but restarting. It now notices when everyone left and gives up after `LobbyReadyTimeoutSeconds` (45s by default)
 - 💀 **Fixed the graveyard final boss keeping its shield for guests**: lamps turning on and going out is now decided by the host. A lamp goes out after a locally rolled random delay, so every player used to count a different number of lit lamps, and the boss armor is derived from that count
 - ⏱️ **Fixed the clocks drifting apart**: the host now keeps everyone on the same run, stage, swarm, difficulty and crypt timer. They diverged because a shared experience pause lasts a different amount of time for each player, so one player could sit at 00:00 with the final swarm while another still had minutes left. Turn off with `SynchronizeTimers`
 

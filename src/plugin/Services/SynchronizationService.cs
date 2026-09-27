@@ -810,7 +810,9 @@ namespace MegabonkTogether.Services
 
         public bool HasNetplaySessionInitialized()
         {
-            return Plugin.Instance.NetworkHandler.HasFoundMatch.HasValue && Plugin.Instance.NetworkHandler.HasFoundMatch.Value;
+            //Called from 45 places including every save operation, so it must not be the thing that throws
+            var networkHandler = Plugin.Instance?.NetworkHandler;
+            return networkHandler != null && networkHandler.HasFoundMatch.HasValue && networkHandler.HasFoundMatch.Value;
         }
 
         public void OnSpawnedEnemy(Enemy enemy, EEnemy enemyName, Vector3 position, int waveNumber, bool forceSpawn, EEnemyFlag flag, bool canBeElite, float extraSizeMultiplier)

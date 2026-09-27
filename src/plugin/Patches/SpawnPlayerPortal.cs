@@ -1,9 +1,11 @@
 ﻿using Assets.Scripts.Utility;
 using HarmonyLib;
+using MegabonkTogether.Configuration;
 using MegabonkTogether.Helpers;
 using MegabonkTogether.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using Utility;
@@ -19,6 +21,9 @@ namespace MegabonkTogether.Patches
         private static float dotAnimTimer = 0f;
         private static int dotCount = 0;
         public static Coroutine WaitForLobbyCoroutine;
+
+        private const float LOG_INTERVAL_SECONDS = 5f;
+        private const float GAVE_UP_MESSAGE_SECONDS = 2f;
 
         /// <summary>
         /// Wait for all players to be ready before starting the game
@@ -68,32 +73,90 @@ namespace MegabonkTogether.Patches
 
             synchronizationService.TransitionToState(GameEvent.Ready);
 
-            while (!synchronizationService.IsLobbyReady())
+            var timeout = ModConfig.LobbyReadyTimeoutSeconds.Value;
+            var waited = 0f;
+            var nextLogAt = 0f;
+            var gaveUp = false;
+
+            try
             {
-                dotAnimTimer += Time.unscaledDeltaTime;
-                if (dotAnimTimer >= 1f)
+                while (!synchronizationService.IsLobbyReady())
                 {
-                    dotAnimTimer = 0f;
-                    dotCount = (dotCount + 1) % 4;
-                    string dots = new string('.', dotCount);
-                    synchronizeText.text = $"Waiting for other players {dots}";
+                    //Unscaled all the way through: the game is really paused here with shared experience.
+                    //Yielding null rather than a WaitForSeconds for the same reason, a scaled wait never
+                    //resumes at timeScale 0
+                    var delta = Time.unscaledDeltaTime;
+                    dotAnimTimer += delta;
+                    waited += delta;
+
+                    if (dotAnimTimer >= 1f)
+                    {
+                        dotAnimTimer = 0f;
+                        dotCount = (dotCount + 1) % 4;
+                        string dots = new string('.', dotCount);
+                        synchronizeText.text = $"Waiting for other players {dots}";
+                    }
+
+                    if (waited >= nextLogAt)
+                    {
+                        //Used to log on every iteration, about six lines a second, which buries everything
+                        //useful in the log people are asked to attach to a bug report
+                        nextLogAt = waited + LOG_INTERVAL_SECONDS;
+                        Plugin.Log.LogInfo($"Lobby not ready yet, waited {waited:F0}s");
+                    }
+
+                    //IsLobbyReady needs at least two players, so once everybody else is gone it can never
+                    //become true again. This used to wait forever on a paused game with no way out
+                    if (playerManagerService.GetAllPlayers().Count() < 2)
+                    {
+                        Plugin.Log.LogWarning("Every other player left while waiting for the lobby, continuing alone instead of waiting forever.");
+                        synchronizeText.text = "The other players left";
+                        gaveUp = true;
+                        break;
+                    }
+
+                    if (timeout > 0f && waited >= timeout)
+                    {
+                        Plugin.Log.LogWarning($"Lobby still not ready after {timeout}s, continuing anyway.");
+                        synchronizeText.text = "Gave up waiting for the other players";
+                        gaveUp = true;
+                        break;
+                    }
+
+                    yield return null;
                 }
+            }
+            finally
+            {
+                //Has to happen on every exit. Leaving these undone keeps the game paused and leaves the
+                //handle set, so StartPortal can never start another wait
+                synchronizationService.TransitionToState(GameEvent.Start);
 
-                Plugin.Log.LogInfo("Lobby not ready yet, waiting...");
+                var seed = playerManagerService.GetSeed();
+                MyRandom.random = new Il2CppSystem.Random(seed);
 
-                yield return new WaitForSeconds(0.17f);
+                WaitForLobbyCoroutine = null;
+
+                MyTime.Unpause();
             }
 
-            Plugin.Log.LogInfo("Lobby is ready, starting the game");
+            Plugin.Log.LogInfo("Done waiting for the lobby, starting the game");
 
-            synchronizationService.TransitionToState(GameEvent.Start);
-            var seed = playerManagerService.GetSeed();
-            MyRandom.random = new Il2CppSystem.Random(seed);
+            if (gaveUp)
+            {
+                //Keep the reason on screen briefly, otherwise nobody knows why the run started like this
+                var shown = 0f;
+                while (shown < GAVE_UP_MESSAGE_SECONDS)
+                {
+                    shown += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+            }
 
-            synchronizeText.enabled = false;
-            WaitForLobbyCoroutine = null;
-
-            MyTime.Unpause();
+            if (synchronizeText != null)
+            {
+                synchronizeText.enabled = false;
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ namespace MegabonkTogether.Configuration
         public static ConfigEntry<bool> EnabledSharedExperience { get; private set; }
         public static ConfigEntry<float> EncounterFailsafeTimeoutSeconds { get; private set; }
         public static ConfigEntry<bool> SynchronizeTimers { get; private set; }
+        public static ConfigEntry<float> LobbyReadyTimeoutSeconds { get; private set; }
 
         public static void Initialize(ConfigFile config)
         {
@@ -82,6 +83,12 @@ namespace MegabonkTogether.Configuration
                 "SynchronizeTimers",
                 true,
                 "Let the host keep every player on the same run, stage, swarm, difficulty and crypt clock. Without this the clocks drift apart, because a shared experience pause lasts a different amount of time for each player."
+            );
+            LobbyReadyTimeoutSeconds = config.Bind(
+                "Network",
+                "LobbyReadyTimeoutSeconds",
+                45f,
+                "How long to wait on the \"Waiting for other players\" screen when loading a map before starting anyway. Without a limit a dropped ready message leaves the game paused on that screen with no way out. Set to 0 to wait forever."
             );
         }
 
