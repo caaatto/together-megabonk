@@ -26,6 +26,7 @@ using Il2CppInterop.Runtime.InteropTypes;
 using MegabonkTogether.Common.Messages;
 using MegabonkTogether.Common.Messages.GameNetworkMessages;
 using MegabonkTogether.Common.Models;
+using MegabonkTogether.Configuration;
 using MegabonkTogether.Extensions;
 using MegabonkTogether.Helpers;
 using MegabonkTogether.Patches;
@@ -128,6 +129,7 @@ namespace MegabonkTogether.Services
         public bool IsSharedExperienceEnabled();
         public void PlayerXpAddXp(int xp, int amount, float leftOverXp);
         public void RewardFinished();
+        public void TickEncounterFailsafe();
         public void OnChangeGold(int amount);
     }
     internal class SynchronizationService : ISynchronizationService
@@ -4420,6 +4422,63 @@ namespace MegabonkTogether.Services
             {
                 udpClientService.SendToHost(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
             }
+        }
+
+        /// <summary>
+        /// Host side watchdog, ticked every frame by NetworkHandler.
+        /// A dropped EncounterClosed / CloseEncounter used to leave every player waiting forever on
+        /// the "Waiting for other player(s) choices..." overlay with no way out but killing the game
+        /// (issues #74, #77, #80, #88).
+        /// The host is the authority here on purpose: if every client closed on its own timer they
+        /// would drift apart instead of staying in sync.
+        /// </summary>
+        public void TickEncounterFailsafe()
+        {
+            if (!HasNetplaySessionStarted() || !IsSharedExperienceEnabled())
+            {
+                return;
+            }
+
+            if (!(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            var timeout = ModConfig.EncounterFailsafeTimeoutSeconds.Value;
+            if (timeout <= 0f)
+            {
+                return;
+            }
+
+            var uiManager = UiManager.Instance;
+            if (uiManager == null || uiManager.encounterWindows == null)
+            {
+                encounterService.ResetFailsafe();
+                return;
+            }
+
+            if (!uiManager.encounterWindows.encounterInProgress)
+            {
+                encounterService.ResetFailsafe();
+                return;
+            }
+
+            if (!encounterService.HasBeenOpenTooLong(timeout))
+            {
+                return;
+            }
+
+            logger.LogWarning($"Encounter still open after {timeout}s, force closing it for every player (failsafe)");
+
+            encounterService.ResetFailsafe();
+            encounterService.Close();
+
+            IGameNetworkMessage closeMessage = new CloseEncounter
+            {
+            };
+
+            udpClientService.SendToAllClients(closeMessage, LiteNetLib.DeliveryMethod.ReliableOrdered);
+            OnCloseEncounter();
         }
 
         private void OnReceivedCloseEncounter(CloseEncounter close)

@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
 
 namespace MegabonkTogether.Configuration
 {
@@ -16,6 +16,7 @@ namespace MegabonkTogether.Configuration
         public static ConfigEntry<string> PreviousVersion { get; private set; }
         public static ConfigEntry<bool> AllowSavesDuringNetplay { get; private set; }
         public static ConfigEntry<bool> EnabledSharedExperience { get; private set; }
+        public static ConfigEntry<float> EncounterFailsafeTimeoutSeconds { get; private set; }
 
         public static void Initialize(ConfigFile config)
         {
@@ -68,6 +69,12 @@ namespace MegabonkTogether.Configuration
                 "EnabledSharedExperience",
                 false,
                 "Enable Host experience (Same XP and pause enabled). Disable for no pause and separate XP."
+            );
+            EncounterFailsafeTimeoutSeconds = config.Bind(
+                "Gameplay",
+                "EncounterFailsafeTimeoutSeconds",
+                60f,
+                "Shared experience only. If an encounter (level up, chest, shrine, ...) stays open longer than this many seconds, the host closes it for everyone so a lost packet cannot soft lock the run. Set to 0 to disable the failsafe."
             );
         }
 

@@ -85,6 +85,13 @@ namespace MegabonkTogether.Scripts
 
                 if (GameManager.Instance == null || GameManager.Instance.player == null || GameManager.Instance.player.inventory == null) return;
 
+                if (isHost && isGameStarted)
+                {
+                    //Must run before the Time.deltaTime accumulators below: shared experience pauses the
+                    //game, so deltaTime is 0 while an encounter is open and nothing else would tick
+                    synchronizationService.TickEncounterFailsafe();
+                }
+
                 lobbyUpdateAccumulator += Time.deltaTime;
 
                 if (isHost && isGameStarted)
