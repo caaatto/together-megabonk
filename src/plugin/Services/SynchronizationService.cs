@@ -130,6 +130,7 @@ namespace MegabonkTogether.Services
         public void PlayerXpAddXp(int xp, int amount, float leftOverXp);
         public void RewardFinished();
         public void TickEncounterFailsafe();
+        public void SendTimersSynchronization();
         public void OnChangeGold(int amount);
     }
     internal class SynchronizationService : ISynchronizationService
@@ -242,6 +243,7 @@ namespace MegabonkTogether.Services
             EventManager.SubscribeStartingChargingLampEvents(OnReceivedStartingToChargingLamp);
             EventManager.SubscribeStoppingChargingLampEvents(OnReceivedStoppingChargingLamp);
             EventManager.SubscribeTimerStartedEvents(OnReceivedTimerStarted);
+            EventManager.SubscribeTimersSynchronizedEvents(OnReceivedTimersSynchronized);
             EventManager.SubscribeHatChangedEvents(OnReceivedHatChanged);
             EventManager.SubscribeSpawnedReviverEvents(OnReceivedSpawnedReviver);
             EventManager.SubscribePlayerRespawnedEvents(OnReceivedPlayerRespawned);
@@ -4288,6 +4290,64 @@ namespace MegabonkTogether.Services
                 Plugin.Instance.HasDungeonTimerStarted = true;
                 GameManager.Instance.StartDungeonTimer();
             }
+        }
+
+        /// <summary>
+        /// Host side, ticked by NetworkHandler. Broadcasts the authoritative MyTime clocks.
+        /// Sent unreliably on purpose: it is a periodic correction, a lost one is picked up by the next
+        /// </summary>
+        public void SendTimersSynchronization()
+        {
+            if (!ModConfig.SynchronizeTimers.Value)
+            {
+                return;
+            }
+
+            if (!HasNetplaySessionStarted() || !(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            IGameNetworkMessage message = new TimersSynchronized
+            {
+                StageTimer = MyTime.stageTimer,
+                RunTimer = MyTime.runTimer,
+                FinalSwarmTimer = MyTime.finalSwarmTimer,
+                DifficultyTimer = MyTime.difficultyTimer,
+                CryptTimer = MyTime.cryptTimer,
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.Unreliable);
+        }
+
+        /// <summary>
+        /// Only correct once the drift is big enough to matter, otherwise the clock would visibly
+        /// twitch every time a correction lands
+        /// </summary>
+        private const float TIMER_DRIFT_TOLERANCE = 0.75f;
+
+        private void OnReceivedTimersSynchronized(TimersSynchronized timers)
+        {
+            if (!ModConfig.SynchronizeTimers.Value || (IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            ApplyTimerIfDrifted(timers.StageTimer, MyTime.stageTimer, value => MyTime.stageTimer = value);
+            ApplyTimerIfDrifted(timers.RunTimer, MyTime.runTimer, value => MyTime.runTimer = value);
+            ApplyTimerIfDrifted(timers.FinalSwarmTimer, MyTime.finalSwarmTimer, value => MyTime.finalSwarmTimer = value);
+            ApplyTimerIfDrifted(timers.DifficultyTimer, MyTime.difficultyTimer, value => MyTime.difficultyTimer = value);
+            ApplyTimerIfDrifted(timers.CryptTimer, MyTime.cryptTimer, value => MyTime.cryptTimer = value);
+        }
+
+        private static void ApplyTimerIfDrifted(float hostValue, float localValue, Action<float> apply)
+        {
+            if (Mathf.Abs(hostValue - localValue) <= TIMER_DRIFT_TOLERANCE)
+            {
+                return;
+            }
+
+            apply(hostValue);
         }
 
         public void OnHatChanged(EHat eHat)

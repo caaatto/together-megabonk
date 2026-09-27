@@ -703,6 +703,9 @@ namespace MegabonkTogether.Services
                     case TimerStarted timerStarted:
                         EventManager.OnTimerStarted(timerStarted);
                         break;
+                    case TimersSynchronized timersSynchronized:
+                        EventManager.OnTimersSynchronized(timersSynchronized);
+                        break;
                     case HatChanged hatChanged:
                         EventManager.OnHatChanged(hatChanged);
                         break;

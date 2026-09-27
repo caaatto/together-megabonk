@@ -24,6 +24,10 @@ namespace MegabonkTogether.Scripts
         private const float projectileUpdatetickInterval = 1f / PROJECTILE_UPDATE_TICK_RATE;
         private float projectileUpdateAccumulator = 0f;
 
+        private const float TIMER_SYNC_TICK_RATE = 1f;
+        private const float timerSyncTickInterval = 1f / TIMER_SYNC_TICK_RATE;
+        private float timerSyncAccumulator = 0f;
+
         private const float TUMBLEWEED_UPDATE_TICK_RATE = 20f;
         private const float tumbleWeedUpdatetickInterval = 1f / TUMBLEWEED_UPDATE_TICK_RATE;
         private float tumbleWeedUpdateAccumulator = 0f;
@@ -110,6 +114,13 @@ namespace MegabonkTogether.Scripts
                 {
                     enemyUpdateAccumulator += Time.deltaTime;
                     projectileUpdateAccumulator += Time.deltaTime;
+
+                    timerSyncAccumulator += Time.deltaTime;
+                    if (timerSyncAccumulator >= timerSyncTickInterval)
+                    {
+                        timerSyncAccumulator = 0f;
+                        synchronizationService.SendTimersSynchronization();
+                    }
 
                     if (MapController.runConfig.mapData.eMap == EMap.Desert)
                     {

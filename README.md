@@ -53,6 +53,7 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 - 🔯 **Fixed shrine, pylon and boss lamp charging** crashing when you left the trigger without a matching start, for example after a level change
 - 📊 **Fixed kill counts and progression drifting apart** between players over a long session
 - 🚀 **Less wasted work in per enemy interpolation** when the host falls behind, which is when the frame rate used to collapse
+- ⏱️ **Fixed the clocks drifting apart**: the host now keeps everyone on the same run, stage, swarm, difficulty and crypt timer. They diverged because a shared experience pause lasts a different amount of time for each player, so one player could sit at 00:00 with the final swarm while another still had minutes left. Turn off with `SynchronizeTimers`
 
 > [!IMPORTANT]
 > This version changes the network format, so every player in a session needs 5.2.0.

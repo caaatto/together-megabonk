@@ -17,6 +17,7 @@ namespace MegabonkTogether.Configuration
         public static ConfigEntry<bool> AllowSavesDuringNetplay { get; private set; }
         public static ConfigEntry<bool> EnabledSharedExperience { get; private set; }
         public static ConfigEntry<float> EncounterFailsafeTimeoutSeconds { get; private set; }
+        public static ConfigEntry<bool> SynchronizeTimers { get; private set; }
 
         public static void Initialize(ConfigFile config)
         {
@@ -75,6 +76,12 @@ namespace MegabonkTogether.Configuration
                 "EncounterFailsafeTimeoutSeconds",
                 60f,
                 "Shared experience only. If an encounter (level up, chest, shrine, ...) stays open longer than this many seconds, the host closes it for everyone so a lost packet cannot soft lock the run. Set to 0 to disable the failsafe."
+            );
+            SynchronizeTimers = config.Bind(
+                "Gameplay",
+                "SynchronizeTimers",
+                true,
+                "Let the host keep every player on the same run, stage, swarm, difficulty and crypt clock. Without this the clocks drift apart, because a shared experience pause lasts a different amount of time for each player."
             );
         }
 

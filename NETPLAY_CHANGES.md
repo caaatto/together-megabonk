@@ -44,6 +44,18 @@ defaults to 60 seconds, and `0` turns the failsafe off.
 The host is the one holding the timer on purpose. If every client closed on its own timer they
 would resume at different moments and desync instead of staying together.
 
+### Shared clocks
+
+Because that pause lasts a different amount of time for each player, the run, stage, final swarm,
+difficulty and crypt clocks used to drift apart over a run. One player could be at 00:00 with the
+final swarm running while another still had minutes left.
+
+The host now broadcasts its own clocks once per second and the other players follow them whenever
+they are off by more than a small tolerance. Enemy spawning and swarm events already come from the
+host, so this only makes the clients agree with what the host is driving anyway.
+
+Set `SynchronizeTimers` to `false` in the config to keep the old per player clocks.
+
 ## Disabled Save/Steam interaction
 
 The game naturally save progression and update your achievement. The game is not really meant to be played online so all of the save/steam interaction is prohibited when playing a netplay game.
