@@ -104,6 +104,8 @@ namespace MegabonkTogether.Patches
                 return;
             }
 
+            MyInputManagerPatches.BeginInputGrace();
+
             if (synchronizationService.IsSharedExperienceEnabled())
             {
                 UiManager.Instance.encounterWindows?.activeEncounterWindow?.gameObject.SetActive(true);

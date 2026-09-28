@@ -130,6 +130,9 @@ namespace MegabonkTogether.Patches
                 return;
             }
 
+            //Before the shared experience early return below, the accidental press happens in both modes
+            MyInputManagerPatches.BeginInputGrace();
+
             if (synchronizationService.IsSharedExperienceEnabled())
             {
                 return;

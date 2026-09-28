@@ -20,6 +20,7 @@ namespace MegabonkTogether.Configuration
         public static ConfigEntry<bool> SynchronizeTimers { get; private set; }
         public static ConfigEntry<float> LobbyReadyTimeoutSeconds { get; private set; }
         public static ConfigEntry<float> ShrineChargeSpeedPerExtraPlayer { get; private set; }
+        public static ConfigEntry<float> RewardInputGraceSeconds { get; private set; }
 
         public static void Initialize(ConfigFile config)
         {
@@ -96,6 +97,12 @@ namespace MegabonkTogether.Configuration
                 "ShrineChargeSpeedPerExtraPlayer",
                 0.5f,
                 "How much faster a charge shrine gets for each additional player standing in it. The required time is divided by (1 + extraPlayers * thisValue), so at 0.5 two players charge 1.5x as fast and four players 2.5x. Set to 0 to keep the single player speed regardless of how many stand in it."
+            );
+            RewardInputGraceSeconds = config.Bind(
+                "Gameplay",
+                "RewardInputGraceSeconds",
+                0.4f,
+                "How long button presses are ignored right after a reward, chest or level up window opens, so a key you were already holding down in the fight does not instantly pick something for you. Movement is not affected, it runs on axes rather than buttons. Set to 0 to disable."
             );
         }
 
