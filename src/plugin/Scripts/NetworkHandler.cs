@@ -108,7 +108,13 @@ namespace MegabonkTogether.Scripts
                     synchronizationService.TickEncounterFailsafe();
                 }
 
-                lobbyUpdateAccumulator += Time.deltaTime;
+                //Unscaled on purpose. This accumulator drives udpClientService.Update(), which does a lot
+                //more than send a position: it refreshes the local player's own Hp, shield and inventory
+                //record, it runs the host side IsGameOver() check, and it sends the lobby update that
+                //carries everybody's state. A shared experience pause sets timeScale to 0, so all of that
+                //used to stop for whoever was sitting in an encounter window, which left their state
+                //stale for everyone else and froze game over detection while the host was paused
+                lobbyUpdateAccumulator += Time.unscaledDeltaTime;
 
                 if (isHost && isGameStarted)
                 {
