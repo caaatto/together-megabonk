@@ -104,7 +104,17 @@ namespace MegabonkTogether.Patches
             var netplayerId = playerManagerService.PeakNetplayerPositionRequest();
             if (netplayerId.HasValue)
             {
-                target = playerManagerService.GetNetPlayerByNetplayId(netplayerId.Value).Model.transform;
+                //Runs in a prefix on the pickup path with nothing catching it, and the netplayer can be
+                //gone while a request is still queued (disconnect, level transition). Same unguarded
+                //dereference that turned into a per frame exception storm in TargetSwitcher
+                var netPlayer = playerManagerService.GetNetPlayerByNetplayId(netplayerId.Value);
+                if (netPlayer == null || netPlayer.Model == null)
+                {
+                    Plugin.Log.LogWarning($"NetPlayer {netplayerId.Value} is gone, not starting to follow this pickup");
+                    return false;
+                }
+
+                target = netPlayer.Model.transform;
                 return true;
             }
 

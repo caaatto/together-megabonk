@@ -1174,10 +1174,24 @@ namespace MegabonkTogether.Services
         {
             try
             {
-                PlayerInventory owner =
-                    playerManagerService.IsLocalConnectionId(projectile.OwnerId) ?
-                        GameManager.Instance.player.inventory :
-                        playerManagerService.GetNetPlayerByNetplayId(projectile.OwnerId).Inventory;
+                PlayerInventory owner;
+                if (playerManagerService.IsLocalConnectionId(projectile.OwnerId))
+                {
+                    owner = GameManager.Instance.player.inventory;
+                }
+                else
+                {
+                    //The surrounding try would swallow the NullReferenceException and the projectile
+                    //would silently not spawn, with nothing in the log saying why
+                    var ownerNetPlayer = playerManagerService.GetNetPlayerByNetplayId(projectile.OwnerId);
+                    if (ownerNetPlayer == null)
+                    {
+                        logger.LogWarning($"NetPlayer {projectile.OwnerId} not found when processing OnReceivedSpawnedProjectile.");
+                        return;
+                    }
+
+                    owner = ownerNetPlayer.Inventory;
+                }
 
                 var weapons = owner.weaponInventory.weapons;
                 var eweapon = (EWeapon)projectile.Weapon;
