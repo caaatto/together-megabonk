@@ -709,6 +709,9 @@ namespace MegabonkTogether.Services
                     case BossLampStateChanged bossLampStateChanged:
                         EventManager.OnBossLampStateChanged(bossLampStateChanged);
                         break;
+                    case ShrineChargersChanged shrineChargersChanged:
+                        EventManager.OnShrineChargersChanged(shrineChargersChanged);
+                        break;
                     case HatChanged hatChanged:
                         EventManager.OnHatChanged(hatChanged);
                         break;

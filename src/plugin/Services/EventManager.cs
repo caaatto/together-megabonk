@@ -63,6 +63,7 @@ namespace MegabonkTogether.Services
         private static event Action<TimerStarted> TimerStartedEvents;
         private static event Action<TimersSynchronized> TimersSynchronizedEvents;
         private static event Action<BossLampStateChanged> BossLampStateChangedEvents;
+        private static event Action<ShrineChargersChanged> ShrineChargersChangedEvents;
         private static event Action<HatChanged> HatChangedEvents;
         private static event Action<SpawnedReviver> SpawnedReviverEvents;
         private static event Action<PlayerRespawned> PlayerRespawnedEvents;
@@ -760,6 +761,19 @@ namespace MegabonkTogether.Services
             MainThreadDispatcher.Enqueue(() =>
             {
                 BossLampStateChangedEvents?.Invoke(state);
+            });
+        }
+
+        public static void SubscribeShrineChargersChangedEvents(Action<ShrineChargersChanged> action)
+        {
+            ShrineChargersChangedEvents += action;
+        }
+
+        public static void OnShrineChargersChanged(ShrineChargersChanged changed)
+        {
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                ShrineChargersChangedEvents?.Invoke(changed);
             });
         }
 

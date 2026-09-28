@@ -19,6 +19,7 @@ namespace MegabonkTogether.Configuration
         public static ConfigEntry<float> EncounterFailsafeTimeoutSeconds { get; private set; }
         public static ConfigEntry<bool> SynchronizeTimers { get; private set; }
         public static ConfigEntry<float> LobbyReadyTimeoutSeconds { get; private set; }
+        public static ConfigEntry<float> ShrineChargeSpeedPerExtraPlayer { get; private set; }
 
         public static void Initialize(ConfigFile config)
         {
@@ -89,6 +90,12 @@ namespace MegabonkTogether.Configuration
                 "LobbyReadyTimeoutSeconds",
                 45f,
                 "How long to wait on the \"Waiting for other players\" screen when loading a map before starting anyway. Without a limit a dropped ready message leaves the game paused on that screen with no way out. Set to 0 to wait forever."
+            );
+            ShrineChargeSpeedPerExtraPlayer = config.Bind(
+                "Gameplay",
+                "ShrineChargeSpeedPerExtraPlayer",
+                0.5f,
+                "How much faster a charge shrine gets for each additional player standing in it. The required time is divided by (1 + extraPlayers * thisValue), so at 0.5 two players charge 1.5x as fast and four players 2.5x. Set to 0 to keep the single player speed regardless of how many stand in it."
             );
         }
 

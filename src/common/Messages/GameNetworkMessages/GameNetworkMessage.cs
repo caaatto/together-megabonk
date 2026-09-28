@@ -74,6 +74,7 @@ namespace MegabonkTogether.Common.Messages
     [MemoryPackUnion(67, typeof(GoldChanged))]
     [MemoryPackUnion(68, typeof(TimersSynchronized))]
     [MemoryPackUnion(69, typeof(BossLampStateChanged))]
+    [MemoryPackUnion(70, typeof(ShrineChargersChanged))]
     public partial interface IGameNetworkMessage
     {
 

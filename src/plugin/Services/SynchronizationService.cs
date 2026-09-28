@@ -132,6 +132,7 @@ namespace MegabonkTogether.Services
         public void TickEncounterFailsafe();
         public void SendTimersSynchronization();
         public void OnBossLampStateChanged(uint lampNetplayId, bool isTurnedOn);
+        public void ApplyShrineChargeSpeed(uint shrineNetplayId, int chargerCount);
         public void OnChangeGold(int amount);
     }
     internal class SynchronizationService : ISynchronizationService
@@ -246,6 +247,7 @@ namespace MegabonkTogether.Services
             EventManager.SubscribeTimerStartedEvents(OnReceivedTimerStarted);
             EventManager.SubscribeTimersSynchronizedEvents(OnReceivedTimersSynchronized);
             EventManager.SubscribeBossLampStateChangedEvents(OnReceivedBossLampStateChanged);
+            EventManager.SubscribeShrineChargersChangedEvents(OnReceivedShrineChargersChanged);
             EventManager.SubscribeHatChangedEvents(OnReceivedHatChanged);
             EventManager.SubscribeSpawnedReviverEvents(OnReceivedSpawnedReviver);
             EventManager.SubscribePlayerRespawnedEvents(OnReceivedPlayerRespawned);
@@ -2794,12 +2796,13 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrineNetplayId).Value;
+            //Keep a real set. This used to replace the collection with a single entry, so no matter how
+            //many players stood in the zone only ever one charger was known (issue #1)
+            var wasAlreadyCharging = AddShrineCharger(shrineNetplayId, playerManagerService.GetLocalPlayer().ConnectionId);
 
-            shrineChargingPlayers[shrineNetplayId] = [playerManagerService.GetLocalPlayer().ConnectionId];
+            BroadcastShrineChargerCount(shrineNetplayId);
 
-            if (chargers != null && chargers.Any())
+            if (wasAlreadyCharging)
             {
                 logger.LogInfo("Another player is already charging this shrine. Preventing re trigger.");
                 return false;
@@ -2810,16 +2813,107 @@ namespace MegabonkTogether.Services
             return true;
         }
 
+        /// <summary>
+        /// Returns whether somebody was already charging before this player joined in
+        /// </summary>
+        private bool AddShrineCharger(uint shrineNetplayId, uint playerId)
+        {
+            var chargers = shrineChargingPlayers.GetOrAdd(shrineNetplayId, _ => new List<uint>());
+
+            lock (chargers)
+            {
+                var wasAlreadyCharging = chargers.Count > 0;
+
+                if (!chargers.Contains(playerId))
+                {
+                    chargers.Add(playerId);
+                }
+
+                return wasAlreadyCharging;
+            }
+        }
+
+        private void BroadcastShrineChargerCount(uint shrineNetplayId)
+        {
+            if (!(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            var count = 0;
+            if (shrineChargingPlayers.TryGetValue(shrineNetplayId, out var chargers) && chargers != null)
+            {
+                lock (chargers)
+                {
+                    count = chargers.Count;
+                }
+            }
+
+            IGameNetworkMessage message = new ShrineChargersChanged
+            {
+                ShrineNetplayId = shrineNetplayId,
+                ChargerCount = (byte)Math.Min(count, byte.MaxValue),
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
+            ApplyShrineChargeSpeed(shrineNetplayId, count);
+        }
+
+        private void OnReceivedShrineChargersChanged(ShrineChargersChanged changed)
+        {
+            ApplyShrineChargeSpeed(changed.ShrineNetplayId, changed.ChargerCount);
+        }
+
+        /// <summary>
+        /// Scales the remaining required charge time by how many players stand in the zone.
+        /// The base time is captured the first time we touch a shrine so repeated changes always compute
+        /// from the original value instead of compounding.
+        /// </summary>
+        public void ApplyShrineChargeSpeed(uint shrineNetplayId, int chargerCount)
+        {
+            var perExtraPlayer = ModConfig.ShrineChargeSpeedPerExtraPlayer.Value;
+            if (perExtraPlayer <= 0f)
+            {
+                return;
+            }
+
+            var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(shrineNetplayId);
+            if (spawnedObj == null)
+            {
+                return;
+            }
+
+            var shrine = spawnedObj.GetComponent<ChargeShrine>();
+            if (shrine == null)
+            {
+                return;
+            }
+
+            var dynShrine = DynamicData.For(shrine);
+            var baseChargeTime = dynShrine.Get<float?>("baseChargeTime");
+            if (!baseChargeTime.HasValue)
+            {
+                baseChargeTime = shrine.currentChargeTime;
+                dynShrine.Set("baseChargeTime", baseChargeTime.Value);
+            }
+
+            var extraPlayers = Mathf.Max(0, chargerCount - 1);
+            var speedup = 1f + extraPlayers * perExtraPlayer;
+
+            shrine.currentChargeTime = baseChargeTime.Value / speedup;
+        }
+
         private void OnReceivedStartingToChargingShrine(StartingChargingShrine shrine)
         {
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrine.ShrineNetplayId).Value;
-                shrineChargingPlayers[shrine.ShrineNetplayId] = [shrine.PlayerChargingId];
+                //Add to the set instead of replacing it, same reason as in OnStartingToChargingShrine
+                var wasAlreadyCharging = AddShrineCharger(shrine.ShrineNetplayId, shrine.PlayerChargingId);
 
-                if (chargers != null && chargers.Any())
+                BroadcastShrineChargerCount(shrine.ShrineNetplayId);
+
+                if (wasAlreadyCharging)
                 {
                     return;
                 }
@@ -2889,15 +2983,22 @@ namespace MegabonkTogether.Services
 
             //A stop can arrive without a matching start (level change, reset, dropped packet) and the
             //ConcurrentDictionary indexer throws KeyNotFoundException in that case, inside a trigger prefix
+            var stillCharging = false;
             if (shrineChargingPlayers.TryGetValue(shrineNetplayId, out var chargers) && chargers != null)
             {
-                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-                if (chargers.Any())
+                lock (chargers)
                 {
-                    logger.LogInfo("Another player is still charging this shrine. Preventing stop trigger.");
-                    return false;
+                    chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+                    stillCharging = chargers.Count > 0;
                 }
+            }
+
+            BroadcastShrineChargerCount(shrineNetplayId);
+
+            if (stillCharging)
+            {
+                logger.LogInfo("Another player is still charging this shrine. Preventing stop trigger.");
+                return false;
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -2910,14 +3011,21 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
+                var stillCharging = false;
                 if (shrineChargingPlayers.TryGetValue(shrine.ShrineNetplayId, out var chargers) && chargers != null)
                 {
-                    chargers.Remove(shrine.PlayerChargingId);
-
-                    if (chargers.Any())
+                    lock (chargers)
                     {
-                        return;
+                        chargers.Remove(shrine.PlayerChargingId);
+                        stillCharging = chargers.Count > 0;
                     }
+                }
+
+                BroadcastShrineChargerCount(shrine.ShrineNetplayId);
+
+                if (stillCharging)
+                {
+                    return;
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(shrine.ShrineNetplayId);
