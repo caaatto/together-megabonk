@@ -6,6 +6,16 @@
 #     "Change 2 description",
 # ]
 
+[version."5.3.0"]
+changes = [
+    "Charge shrines now get faster the more players stand in them. The mod only ever tracked a single charger per shrine and suppressed every additional trigger, so occupancy could not matter. Tunable with ShrineChargeSpeedPerExtraPlayer.",
+    "Button presses are ignored for a moment right after a reward, chest or level up window opens, so a key you were already holding in the fight no longer picks something for you instantly. Movement is unaffected. Tunable with RewardInputGraceSeconds.",
+    "Fixed the map going blank after you die. The netplayer reveal was switched off whenever the local player could not give input, which includes being dead, so it stopped exactly when a spectating player needs it.",
+    "The death cam no longer follows a dead player. A dead player's model is hidden, so spectating one showed nothing at all.",
+    "Player and lobby updates keep being sent while your own game is paused. Everything in that update stopped during a pause, including your own health and inventory record and, on the host, game over detection.",
+    "Fixed two more crashes from following a player who had just disconnected or was not spawned yet.",
+]
+
 [version."5.2.0"]
 changes = [
     "Fixed the permanent soft lock on 'Waiting for other player(s) choices...'. Confirmations are now counted per player instead of collected in a set that got cleared after every encounter, so a late confirmation or one sent by a dead player can no longer close an encounter somebody is still choosing in.",

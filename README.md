@@ -43,6 +43,18 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 <details>
 <summary>📋 Click to view full changelog</summary>
 
+### v5.3.0
+
+- 🗽 **Shrines laden schneller mit mehr Spielern**: der Mod kannte pro Shrine nur einen einzigen Charger und unterdrueckte jeden weiteren Trigger, es konnte also gar nicht skalieren. Regelbar mit `ShrineChargeSpeedPerExtraPlayer`
+- ⌨️ **Kein versehentliches Auswaehlen mehr**: direkt nach dem Oeffnen eines Reward-, Chest- oder Level-Up-Fensters werden Tastendruecke kurz ignoriert. Bewegung bleibt unberuehrt. Regelbar mit `RewardInputGraceSeconds`
+- 🗺️ **Karte funktioniert nach dem Tod**: die Netplayer-Aufdeckung war abgeschaltet, sobald der lokale Spieler keine Eingabe machen konnte, also auch im Tod
+- 👁️ **Death-Cam folgt keinem Toten mehr**: das Modell eines toten Spielers ist versteckt, man sah also nichts
+- 📡 **Spieler- und Lobby-Updates laufen auch bei pausiertem Spiel**: waehrend einer Pause stand der komplette Update, inklusive eigener Health- und Inventar-Daten und, beim Host, der Game-Over-Erkennung
+- 🛡️ **Zwei weitere Abstuerze** beim Folgen eines Spielers, der gerade weg war oder noch nicht gespawnt
+
+> [!IMPORTANT]
+> Diese Version aendert erneut das Netzwerkformat, alle Spieler brauchen 5.3.0.
+
 ### v5.2.0
 
 - 🔓 **Fixed the permanent soft lock on "Waiting for other player(s) choices..."**: confirmations are now counted per player instead of collected in a set that got cleared after every encounter, so a late confirmation, or one sent by a dead player, can no longer close an encounter somebody is still choosing in
