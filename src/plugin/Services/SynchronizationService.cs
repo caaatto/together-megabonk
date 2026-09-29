@@ -564,14 +564,41 @@ namespace MegabonkTogether.Services
             PickupManager.Instance.xpList.maxObjects = 10000; //Increase max Xp pickup since on netplay, there are more enemies
             PickupManager.Instance.goldList.maxObjects = 10000; //Increase max Gold pickup since on netplay, there are more enemies
 
-            var allNetPlayers = playerManagerService.GetAllPlayersExceptLocal();
-            var minimapCamera = GameManager.Instance.player.minimapCamera.GetComponent<MinimapCamera>();
-            foreach (var netPlayer in allNetPlayers)
+            //This loop used to be able to abort the rest of StartGame on a single netplayer that was not
+            //spawned yet, because it dereferenced GetNetPlayerByNetplayId(...).Model without a check.
+            //currentState is already Started at that point, so nothing looked wrong, but both
+            //gameBalanceService.Initialize() and PreventDeath() below were silently skipped. Without
+            //PreventDeath the vanilla death handling stays in place and dying drops the player straight
+            //to the death screen instead of the spectator camera (issue #7)
+            try
             {
-                Plugin.Instance.NetPlayersDisplayer.AddPlayer(netPlayer);
-                var spawnedPlayer = playerManagerService.GetNetPlayerByNetplayId(netPlayer.ConnectionId);
-                var playerColor = Plugin.Instance.NetPlayersDisplayer.GetPlayerColor(netPlayer.ConnectionId);
-                minimapCamera.AddArrow(spawnedPlayer.Model.transform, playerColor);
+                var allNetPlayers = playerManagerService.GetAllPlayersExceptLocal();
+
+                MinimapCamera minimapCamera = null;
+                var minimapCameraObject = GameManager.Instance.player.minimapCamera;
+                if (minimapCameraObject != null)
+                {
+                    minimapCamera = minimapCameraObject.GetComponent<MinimapCamera>();
+                }
+
+                foreach (var netPlayer in allNetPlayers)
+                {
+                    Plugin.Instance.NetPlayersDisplayer.AddPlayer(netPlayer);
+
+                    var spawnedPlayer = playerManagerService.GetNetPlayerByNetplayId(netPlayer.ConnectionId);
+                    if (minimapCamera == null || spawnedPlayer == null || spawnedPlayer.Model == null)
+                    {
+                        logger.LogWarning($"No spawned model for player {netPlayer.ConnectionId} yet, skipping its minimap arrow.");
+                        continue;
+                    }
+
+                    var playerColor = Plugin.Instance.NetPlayersDisplayer.GetPlayerColor(netPlayer.ConnectionId);
+                    minimapCamera.AddArrow(spawnedPlayer.Model.transform, playerColor);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Failed to set up the netplayer minimap arrows: {ex}");
             }
 
             gameBalanceService.Initialize();
