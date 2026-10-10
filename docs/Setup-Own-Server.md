@@ -9,7 +9,7 @@ This guide explains how to set up and run your own MegabonkTogether matchmaking/
 
 ### Option A - Download the Prebuilt Server
 
-1. Go to the [latest GitHub release](https://github.com/caaatto/together-megabonk/releases/latest).
+1. Go to the [latest GitHub release](https://github.com/caaatto/together-we-bonk/releases/latest).
 2. Download the **`MegabonkTogether-Server-win-x64-*.zip`** archive.
 3. Extract it to a folder of your choice.
 4. Run `MegabonkTogether.Server.exe`.
@@ -18,8 +18,8 @@ This guide explains how to set up and run your own MegabonkTogether matchmaking/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/caaatto/together-megabonk.git
-   cd together-megabonk
+   git clone https://github.com/caaatto/together-we-bonk.git
+   cd together-we-bonk
    ```
 2. Build and run the server:
    ```bash

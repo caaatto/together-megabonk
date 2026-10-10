@@ -74,7 +74,7 @@ jobs:
       - name: Build Thunderstore / r2modman package
         run: |
           bash scripts/thunderstore/package.sh
-          cp artifacts/thunderstore/*-MegabonkTogether-"$VERSION".zip artifacts/release/
+          cp artifacts/thunderstore/*-TogetherWeBonk-"$VERSION".zip artifacts/release/
 
       - name: Build server (Windows x64)
         run: |
@@ -87,7 +87,7 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: MegabonkTogether-${{ env.VERSION }}
+          name: TogetherWeBonk-${{ env.VERSION }}
           path: artifacts/release/*.zip
 
       - name: Check if this version is already released
@@ -119,7 +119,7 @@ jobs:
           print()
           print("## Install")
           print()
-          print("- **r2modman**: download the `*-MegabonkTogether-*.zip`, then Settings > Import local mod")
+          print("- **r2modman**: download the `*-TogetherWeBonk-*.zip`, then Settings > Profile > Import local mod")
           print("- **Manual (Windows)**: copy the `MegabonkTogether` folder from `Megabonk-Together-*.zip` into `BepInEx/plugins`")
           print("- **Proton / Steam Deck**: same, with `Megabonk-Together-Proton-*.zip`")
           EOF

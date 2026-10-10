@@ -1,4 +1,4 @@
-# megabonk-together
+# together-we-bonk
 
 <p align="center">
   <img src="images/togetherButton.png" alt="logo" />
@@ -179,7 +179,7 @@ Also this mod was developed for the 1.0.49 version (ok let me rant a bit, it was
 
 ## r2modman
 
-- Download `caaatto-MegabonkTogether-X.Y.Z.zip` from the [latest release](https://github.com/caaatto/together-megabonk/releases/latest)
+- Download `caaatto-TogetherWeBonk-X.Y.Z.zip` from the [latest release](https://github.com/caaatto/together-we-bonk/releases/latest)
 - In r2modman, pick Megabonk and your profile, then go to Settings > Profile > Import local mod and select the zip
 - If `BepInExPack_IL2CPP` is not in the profile yet, install it from the Online tab
 - Start the game with "Start modded"
@@ -202,7 +202,7 @@ Start by downloading the BepInex loader [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.7
 
 - Launch the game first at least one time to confirm BepInEx is working (Wait for the main menu as BepInEx need to make some dummy dll). Yous should see a terminal opened along side with the game with some logs in it
 
-- After exiting the game,grab and download the [latest release](https://github.com/caaatto/together-megabonk/releases/latest)
+- After exiting the game,grab and download the [latest release](https://github.com/caaatto/together-we-bonk/releases/latest)
 
 - Extract the zip and copy the folder `Megabonk-Together` to the plugins path of BepInEx , something like `../steamapps/common/Megabonk/BepInEx/plugins`
 
@@ -212,7 +212,7 @@ Start by downloading the BepInex loader [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.7
 > The button is not navigable right now, you won't be able to select it with a controller , use your mouse to interact with it (You can pick your controller later)
 > Will try to fix later
 
-- Enjoy ! Do not hesitate to open an [issue](https://github.com/caaatto/together-megabonk/issues) if you encounter a bug or something isn't working
+- Enjoy ! Do not hesitate to open an [issue](https://github.com/caaatto/together-we-bonk/issues) if you encounter a bug or something isn't working
 
 # How to play
 
@@ -297,7 +297,7 @@ and the core dump that pinned this down.
    - Launch the game once to let BepInEx generate the interop assemblies. This might take a minute on the splash screen.
 
 5. **Install the Mod:**
-   - Download the latest proton [release](https://github.com/caaatto/together-megabonk/releases/latest) (in the release page, grab the -proton zip).
+   - Download the latest proton [release](https://github.com/caaatto/together-we-bonk/releases/latest) (in the release page, grab the -proton zip).
    - Extract the `Megabonk-Together` folder into `.../Megabonk/BepInEx/plugins/`.
 
 After installation, your Megabonk directory should look like this:

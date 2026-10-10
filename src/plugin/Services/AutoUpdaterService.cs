@@ -56,7 +56,7 @@ namespace MegabonkTogether.Common
         private static readonly TimeSpan UPDATE_CHECK_COOLDOWN = TimeSpan.FromMinutes(5);
 
         private const string GITHUB_OWNER = "caaatto";
-        private const string GITHUB_REPO = "together-megabonk";
+        private const string GITHUB_REPO = "together-we-bonk";
         private string currentVersion;
         private string pluginPath;
         private ManualLogSource logger;

@@ -13,8 +13,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 NAMESPACE="${THUNDERSTORE_NAMESPACE:-caaatto}"
-PACKAGE_NAME="MegabonkTogether"
-WEBSITE_URL="https://github.com/caaatto/together-megabonk"
+PACKAGE_NAME="TogetherWeBonk"
+# Folder the plugin lives in, kept so existing installs and configs stay valid
+PLUGIN_DIR="MegabonkTogether"
+WEBSITE_URL="https://github.com/caaatto/together-we-bonk"
 BEPINEX_DEPENDENCY="BepInEx-BepInExPack_IL2CPP-6.0.738"
 
 VERSION="${VERSION:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/plugin/MegabonkTogether.Plugin.csproj)}"
@@ -37,16 +39,16 @@ ZIP="artifacts/thunderstore/$NAMESPACE-$PACKAGE_NAME-$VERSION.zip"
 echo "Packaging $NAMESPACE-$PACKAGE_NAME $VERSION..."
 
 rm -rf "$BUILD_DIR" "$STAGING_DIR" "$ZIP"
-mkdir -p "$STAGING_DIR/$PACKAGE_NAME"
+mkdir -p "$STAGING_DIR/$PLUGIN_DIR"
 
 # THUNDERSTORE turns off the self updater, r2modman handles updates
 export THUNDERSTORE_BUILD=true
 dotnet build src/plugin/MegabonkTogether.Plugin.csproj -c Release -o "$BUILD_DIR"
 
-cp "$BUILD_DIR"/*.dll "$STAGING_DIR/$PACKAGE_NAME/"
-cp "$BUILD_DIR"/*.pdb "$STAGING_DIR/$PACKAGE_NAME/"
+cp "$BUILD_DIR"/*.dll "$STAGING_DIR/$PLUGIN_DIR/"
+cp "$BUILD_DIR"/*.pdb "$STAGING_DIR/$PLUGIN_DIR/"
 # Read next to the plugin dll for the in game changelog
-cp src/plugin/CHANGELOG.toml "$STAGING_DIR/$PACKAGE_NAME/"
+cp src/plugin/CHANGELOG.toml "$STAGING_DIR/$PLUGIN_DIR/"
 
 cp images/icon.png "$STAGING_DIR/icon.png"
 cp README.md "$STAGING_DIR/README.md"
@@ -64,6 +66,6 @@ cat > "$STAGING_DIR/manifest.json" <<EOF
 EOF
 
 # python's zipfile always writes forward slashes, which r2modman needs
-(cd "$STAGING_DIR" && "$PYTHON" -m zipfile -c "$REPO_ROOT/$ZIP" manifest.json icon.png README.md "$PACKAGE_NAME")
+(cd "$STAGING_DIR" && "$PYTHON" -m zipfile -c "$REPO_ROOT/$ZIP" manifest.json icon.png README.md "$PLUGIN_DIR")
 
 echo "Package written to $ZIP"
