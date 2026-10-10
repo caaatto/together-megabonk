@@ -5,6 +5,7 @@ using MegabonkTogether.Extensions;
 using MegabonkTogether.Helpers;
 using MegabonkTogether.Scripts.Enemies;
 using MonoMod.Utils;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -45,30 +46,69 @@ namespace MegabonkTogether.Services
 
         /// <summary>
         /// Server side, retarget enemies when a player dies (or other use case ? )
+        /// Every step is guarded on purpose: this used to throw when no alive player was left,
+        /// which aborted the whole loop and left the remaining enemies chasing a target that
+        /// does not exist anymore (they end up walking into walls, see issue #49)
         /// </summary>
         public IEnumerable<(uint, uint)> ReTargetEnemies(uint oldTargetId, IEnumerable<uint> currentPlayersAliveExcludingOldOneId)
         {
             var retargetedEnemies = new List<(uint, uint)>();
-            var oldTargetEnemies = spawnedEnemies.Values.Where(enemy =>
-            {
-                var currentTargetid = DynamicData.For(enemy).Get<uint?>("targetId");
-                if (currentTargetid.HasValue && currentTargetid.Value == oldTargetId)
-                {
-                    return true;
-                }
-                return false;
-            });
 
+            //Materialize once, we index into it for every single enemy below
+            var candidateTargetIds = currentPlayersAliveExcludingOldOneId as IList<uint>
+                ?? currentPlayersAliveExcludingOldOneId?.ToList();
+
+            if (candidateTargetIds == null || candidateTargetIds.Count == 0)
+            {
+                //Last player standing just died / everyone left. Nothing to retarget to
+                Plugin.Log.LogWarning($"No alive player left to retarget enemies of {oldTargetId} to, skipping retarget");
+                return retargetedEnemies;
+            }
+
+            var oldTargetEnemies = new List<Enemy>();
+            foreach (var enemy in spawnedEnemies.Values)
+            {
+                if (enemy == null) //Destroyed enemy still sitting in the registry
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var currentTargetid = DynamicData.For(enemy).Get<uint?>("targetId");
+                    if (currentTargetid.HasValue && currentTargetid.Value == oldTargetId)
+                    {
+                        oldTargetEnemies.Add(enemy);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.LogWarning($"Failed to read targetId while retargeting: {ex.Message}");
+                }
+            }
 
             foreach (var oldEnemy in oldTargetEnemies)
             {
-                var randomIndex = Random.Range(0, currentPlayersAliveExcludingOldOneId.Count());
-                var randomNewTargetId = currentPlayersAliveExcludingOldOneId.ElementAt(randomIndex);
+                //Guarded per enemy so one bad entry can't drop the retarget of every other enemy
+                try
+                {
+                    var randomIndex = UnityEngine.Random.Range(0, candidateTargetIds.Count);
+                    var randomNewTargetId = candidateTargetIds[randomIndex];
 
-                DynamicData.For(oldEnemy).Set("targetId", randomNewTargetId);
-                var enemyId = GetEnemyByReference(oldEnemy).Key;
+                    DynamicData.For(oldEnemy).Set("targetId", randomNewTargetId);
+                    var enemyId = GetEnemyByReference(oldEnemy).Key;
 
-                retargetedEnemies.Add((enemyId, randomNewTargetId));
+                    if (enemyId == 0) //Not tracked anymore, sending it would retarget nothing on the clients
+                    {
+                        continue;
+                    }
+
+                    retargetedEnemies.Add((enemyId, randomNewTargetId));
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.LogWarning($"Failed to retarget an enemy of {oldTargetId}: {ex.Message}");
+                }
             }
 
             return retargetedEnemies;

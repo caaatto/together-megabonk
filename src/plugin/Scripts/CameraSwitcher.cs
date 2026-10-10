@@ -1,4 +1,4 @@
-using Assets.Scripts.Actors.Enemies;
+﻿using Assets.Scripts.Actors.Enemies;
 using MegabonkTogether.Helpers;
 using MegabonkTogether.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -172,7 +172,8 @@ namespace MegabonkTogether.Scripts
 
         private void NextPlayer()
         {
-            var allNetPlayers = playerManager.GetAllSpawnedNetPlayers().ToList();
+            //Dead netplayers have a hidden model, cycling onto one shows nothing
+            var allNetPlayers = playerManager.GetAllSpawnedNetPlayersAlive().ToList();
             if (allNetPlayers.Count == 0) return;
 
             targetIndex++;
@@ -186,7 +187,7 @@ namespace MegabonkTogether.Scripts
 
         private void PreviousPlayer()
         {
-            var allNetPlayers = playerManager.GetAllSpawnedNetPlayers().ToList();
+            var allNetPlayers = playerManager.GetAllSpawnedNetPlayersAlive().ToList();
             if (allNetPlayers.Count == 0) return;
 
             targetIndex--;

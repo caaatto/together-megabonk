@@ -1,4 +1,4 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using MegabonkTogether.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,7 +22,10 @@ namespace MegabonkTogether.Patches
                 return;
             }
 
-            if (!GameManager.Instance.player.playerInput.CanInput()) return; //Just to wait a bit if not we can reveal not final players positions
+            //The point of this guard is not to reveal positions that are not final yet, which is a
+            //loading concern. It used to check CanInput(), which is also false while the local player is
+            //dead, so the whole netplayer reveal stopped exactly when a spectating player needs the map
+            if (synchronizationService.IsLoading() || synchronizationService.IsLoadingNextLevel()) return;
 
             var netPlayers = playerManagerService.GetAllSpawnedNetPlayers();
 

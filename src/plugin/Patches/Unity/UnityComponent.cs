@@ -34,7 +34,13 @@ namespace MegabonkTogether.Patches.Unity
             if (pendingRequest.HasValue && __instance.name == "Player")
             {
                 var netPlayerId = pendingRequest.Value;
-                var localPlayerId = playerManagerService.GetLocalPlayer().ConnectionId;
+                var localPlayer = playerManagerService.GetLocalPlayer();
+                if (localPlayer == null)
+                {
+                    return true; //Patches a getter the whole game calls, an exception here is very expensive
+                }
+
+                var localPlayerId = localPlayer.ConnectionId;
                 if (netPlayerId == localPlayerId)
                 {
                     return true;
@@ -86,7 +92,13 @@ namespace MegabonkTogether.Patches.Unity
             if (pendingRequest.HasValue && __instance.name == "Hips")
             {
                 var netPlayerId = pendingRequest.Value;
-                var localPlayerId = playerManagerService.GetLocalPlayer().ConnectionId;
+                var localPlayer = playerManagerService.GetLocalPlayer();
+                if (localPlayer == null)
+                {
+                    return true; //Patches a getter the whole game calls, an exception here is very expensive
+                }
+
+                var localPlayerId = localPlayer.ConnectionId;
                 if (netPlayerId == localPlayerId)
                 {
                     return true;
@@ -130,7 +142,13 @@ namespace MegabonkTogether.Patches.Unity
             if (pendingRequest.HasValue && __instance.name == "Renderer")
             {
                 var netPlayerId = pendingRequest.Value;
-                var localPlayerId = playerManagerService.GetLocalPlayer().ConnectionId;
+                var localPlayer = playerManagerService.GetLocalPlayer();
+                if (localPlayer == null)
+                {
+                    return true; //Patches a getter the whole game calls, an exception here is very expensive
+                }
+
+                var localPlayerId = localPlayer.ConnectionId;
 
                 if (netPlayerId == localPlayerId)
                 {

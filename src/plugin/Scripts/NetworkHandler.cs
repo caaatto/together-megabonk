@@ -24,6 +24,10 @@ namespace MegabonkTogether.Scripts
         private const float projectileUpdatetickInterval = 1f / PROJECTILE_UPDATE_TICK_RATE;
         private float projectileUpdateAccumulator = 0f;
 
+        private const float TIMER_SYNC_TICK_RATE = 1f;
+        private const float timerSyncTickInterval = 1f / TIMER_SYNC_TICK_RATE;
+        private float timerSyncAccumulator = 0f;
+
         private const float TUMBLEWEED_UPDATE_TICK_RATE = 20f;
         private const float tumbleWeedUpdatetickInterval = 1f / TUMBLEWEED_UPDATE_TICK_RATE;
         private float tumbleWeedUpdateAccumulator = 0f;
@@ -73,6 +77,18 @@ namespace MegabonkTogether.Scripts
 
         public void Update()
         {
+            //Every block that suspends message sending begins and ends inside one synchronous call
+            //(verified: none of them contains a yield or an early return), so a flag that is still
+            //down at the start of a frame can only mean an exception escaped one of those blocks.
+            //Leaving it down silently stops this player from sending anything at all for the rest of
+            //the run, which looks exactly like the "everything desyncs and there is nothing in the
+            //log" reports
+            if (!Plugin.CAN_SEND_MESSAGES)
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+                Plugin.Log.LogWarning("Message sending was still suspended at the start of a frame, restoring it. An exception most likely escaped a CAN_SEND_MESSAGES block.");
+            }
+
             try
             {
                 if (udpClientService == null || synchronizationService == null) return;
@@ -85,12 +101,32 @@ namespace MegabonkTogether.Scripts
 
                 if (GameManager.Instance == null || GameManager.Instance.player == null || GameManager.Instance.player.inventory == null) return;
 
-                lobbyUpdateAccumulator += Time.deltaTime;
+                if (isHost && isGameStarted)
+                {
+                    //Must run before the Time.deltaTime accumulators below: shared experience pauses the
+                    //game, so deltaTime is 0 while an encounter is open and nothing else would tick
+                    synchronizationService.TickEncounterFailsafe();
+                }
+
+                //Unscaled on purpose. This accumulator drives udpClientService.Update(), which does a lot
+                //more than send a position: it refreshes the local player's own Hp, shield and inventory
+                //record, it runs the host side IsGameOver() check, and it sends the lobby update that
+                //carries everybody's state. A shared experience pause sets timeScale to 0, so all of that
+                //used to stop for whoever was sitting in an encounter window, which left their state
+                //stale for everyone else and froze game over detection while the host was paused
+                lobbyUpdateAccumulator += Time.unscaledDeltaTime;
 
                 if (isHost && isGameStarted)
                 {
                     enemyUpdateAccumulator += Time.deltaTime;
                     projectileUpdateAccumulator += Time.deltaTime;
+
+                    timerSyncAccumulator += Time.deltaTime;
+                    if (timerSyncAccumulator >= timerSyncTickInterval)
+                    {
+                        timerSyncAccumulator = 0f;
+                        synchronizationService.SendTimersSynchronization();
+                    }
 
                     if (MapController.runConfig.mapData.eMap == EMap.Desert)
                     {

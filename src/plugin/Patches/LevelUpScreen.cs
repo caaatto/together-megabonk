@@ -29,6 +29,8 @@ namespace MegabonkTogether.Patches
                 return;
             }
 
+            MyInputManagerPatches.BeginInputGrace();
+
             if (synchronizationService.IsSharedExperienceEnabled())
             {
                 return;

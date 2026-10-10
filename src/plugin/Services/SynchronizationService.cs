@@ -26,6 +26,7 @@ using Il2CppInterop.Runtime.InteropTypes;
 using MegabonkTogether.Common.Messages;
 using MegabonkTogether.Common.Messages.GameNetworkMessages;
 using MegabonkTogether.Common.Models;
+using MegabonkTogether.Configuration;
 using MegabonkTogether.Extensions;
 using MegabonkTogether.Helpers;
 using MegabonkTogether.Patches;
@@ -128,6 +129,10 @@ namespace MegabonkTogether.Services
         public bool IsSharedExperienceEnabled();
         public void PlayerXpAddXp(int xp, int amount, float leftOverXp);
         public void RewardFinished();
+        public void TickEncounterFailsafe();
+        public void SendTimersSynchronization();
+        public void OnBossLampStateChanged(uint lampNetplayId, bool isTurnedOn);
+        public void ApplyShrineChargeSpeed(uint shrineNetplayId, int chargerCount);
         public void OnChangeGold(int amount);
     }
     internal class SynchronizationService : ISynchronizationService
@@ -240,6 +245,9 @@ namespace MegabonkTogether.Services
             EventManager.SubscribeStartingChargingLampEvents(OnReceivedStartingToChargingLamp);
             EventManager.SubscribeStoppingChargingLampEvents(OnReceivedStoppingChargingLamp);
             EventManager.SubscribeTimerStartedEvents(OnReceivedTimerStarted);
+            EventManager.SubscribeTimersSynchronizedEvents(OnReceivedTimersSynchronized);
+            EventManager.SubscribeBossLampStateChangedEvents(OnReceivedBossLampStateChanged);
+            EventManager.SubscribeShrineChargersChangedEvents(OnReceivedShrineChargersChanged);
             EventManager.SubscribeHatChangedEvents(OnReceivedHatChanged);
             EventManager.SubscribeSpawnedReviverEvents(OnReceivedSpawnedReviver);
             EventManager.SubscribePlayerRespawnedEvents(OnReceivedPlayerRespawned);
@@ -289,12 +297,16 @@ namespace MegabonkTogether.Services
 
             shrineChargingPlayers.Clear();
             pylonChargingPlayers.Clear();
+            lampsChargingPlayers.Clear(); //Was missing, stale chargers survived into the next run and
+                                          //suppressed the lamp trigger there
             cancellationTokenSource.Cancel();
             cancellationTokenSource = new CancellationTokenSource();
             cancellationToken = cancellationTokenSource.Token;
             PrepareForNextLevel();
             playerManagerService.Reset();
             enemyManagerService.ResetReviverSpawnCounts();
+            encounterService.Reset();
+            trackerService.Reset();
 
             Plugin.Instance.HasDungeonTimerStarted = false;
         }
@@ -552,14 +564,41 @@ namespace MegabonkTogether.Services
             PickupManager.Instance.xpList.maxObjects = 10000; //Increase max Xp pickup since on netplay, there are more enemies
             PickupManager.Instance.goldList.maxObjects = 10000; //Increase max Gold pickup since on netplay, there are more enemies
 
-            var allNetPlayers = playerManagerService.GetAllPlayersExceptLocal();
-            var minimapCamera = GameManager.Instance.player.minimapCamera.GetComponent<MinimapCamera>();
-            foreach (var netPlayer in allNetPlayers)
+            //This loop used to be able to abort the rest of StartGame on a single netplayer that was not
+            //spawned yet, because it dereferenced GetNetPlayerByNetplayId(...).Model without a check.
+            //currentState is already Started at that point, so nothing looked wrong, but both
+            //gameBalanceService.Initialize() and PreventDeath() below were silently skipped. Without
+            //PreventDeath the vanilla death handling stays in place and dying drops the player straight
+            //to the death screen instead of the spectator camera (issue #7)
+            try
             {
-                Plugin.Instance.NetPlayersDisplayer.AddPlayer(netPlayer);
-                var spawnedPlayer = playerManagerService.GetNetPlayerByNetplayId(netPlayer.ConnectionId);
-                var playerColor = Plugin.Instance.NetPlayersDisplayer.GetPlayerColor(netPlayer.ConnectionId);
-                minimapCamera.AddArrow(spawnedPlayer.Model.transform, playerColor);
+                var allNetPlayers = playerManagerService.GetAllPlayersExceptLocal();
+
+                MinimapCamera minimapCamera = null;
+                var minimapCameraObject = GameManager.Instance.player.minimapCamera;
+                if (minimapCameraObject != null)
+                {
+                    minimapCamera = minimapCameraObject.GetComponent<MinimapCamera>();
+                }
+
+                foreach (var netPlayer in allNetPlayers)
+                {
+                    Plugin.Instance.NetPlayersDisplayer.AddPlayer(netPlayer);
+
+                    var spawnedPlayer = playerManagerService.GetNetPlayerByNetplayId(netPlayer.ConnectionId);
+                    if (minimapCamera == null || spawnedPlayer == null || spawnedPlayer.Model == null)
+                    {
+                        logger.LogWarning($"No spawned model for player {netPlayer.ConnectionId} yet, skipping its minimap arrow.");
+                        continue;
+                    }
+
+                    var playerColor = Plugin.Instance.NetPlayersDisplayer.GetPlayerColor(netPlayer.ConnectionId);
+                    minimapCamera.AddArrow(spawnedPlayer.Model.transform, playerColor);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Failed to set up the netplayer minimap arrows: {ex}");
             }
 
             gameBalanceService.Initialize();
@@ -705,6 +744,7 @@ namespace MegabonkTogether.Services
 
         public void PrepareForNextLevel()
         {
+            trackerService.Reset();
             spawnedObjectManagerService.ResetForNextLevel();
             enemyManagerService.ResetForNextLevel();
             projectileManagerService.ResetForNextLevel();
@@ -799,7 +839,9 @@ namespace MegabonkTogether.Services
 
         public bool HasNetplaySessionInitialized()
         {
-            return Plugin.Instance.NetworkHandler.HasFoundMatch.HasValue && Plugin.Instance.NetworkHandler.HasFoundMatch.Value;
+            //Called from 45 places including every save operation, so it must not be the thing that throws
+            var networkHandler = Plugin.Instance?.NetworkHandler;
+            return networkHandler != null && networkHandler.HasFoundMatch.HasValue && networkHandler.HasFoundMatch.Value;
         }
 
         public void OnSpawnedEnemy(Enemy enemy, EEnemy enemyName, Vector3 position, int waveNumber, bool forceSpawn, EEnemyFlag flag, bool canBeElite, float extraSizeMultiplier)
@@ -1161,10 +1203,24 @@ namespace MegabonkTogether.Services
         {
             try
             {
-                PlayerInventory owner =
-                    playerManagerService.IsLocalConnectionId(projectile.OwnerId) ?
-                        GameManager.Instance.player.inventory :
-                        playerManagerService.GetNetPlayerByNetplayId(projectile.OwnerId).Inventory;
+                PlayerInventory owner;
+                if (playerManagerService.IsLocalConnectionId(projectile.OwnerId))
+                {
+                    owner = GameManager.Instance.player.inventory;
+                }
+                else
+                {
+                    //The surrounding try would swallow the NullReferenceException and the projectile
+                    //would silently not spawn, with nothing in the log saying why
+                    var ownerNetPlayer = playerManagerService.GetNetPlayerByNetplayId(projectile.OwnerId);
+                    if (ownerNetPlayer == null)
+                    {
+                        logger.LogWarning($"NetPlayer {projectile.OwnerId} not found when processing OnReceivedSpawnedProjectile.");
+                        return;
+                    }
+
+                    owner = ownerNetPlayer.Inventory;
+                }
 
                 var weapons = owner.weaponInventory.weapons;
                 var eweapon = (EWeapon)projectile.Weapon;
@@ -1891,7 +1947,8 @@ namespace MegabonkTogether.Services
             var netPlayer = playerManagerService.GetNetPlayerByNetplayId(player.PlayerId);
             if (netPlayer == null)
             {
-                if (player.PlayerId == playerManagerService.GetLocalPlayer().ConnectionId)
+                var localPlayer = playerManagerService.GetLocalPlayer();
+                if (localPlayer != null && player.PlayerId == localPlayer.ConnectionId)
                 {
                     target = GameManager.Instance.player.transform;
                 }
@@ -2766,12 +2823,13 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrineNetplayId).Value;
+            //Keep a real set. This used to replace the collection with a single entry, so no matter how
+            //many players stood in the zone only ever one charger was known (issue #1)
+            var wasAlreadyCharging = AddShrineCharger(shrineNetplayId, playerManagerService.GetLocalPlayer().ConnectionId);
 
-            shrineChargingPlayers[shrineNetplayId] = [playerManagerService.GetLocalPlayer().ConnectionId];
+            BroadcastShrineChargerCount(shrineNetplayId);
 
-            if (chargers != null && chargers.Any())
+            if (wasAlreadyCharging)
             {
                 logger.LogInfo("Another player is already charging this shrine. Preventing re trigger.");
                 return false;
@@ -2782,16 +2840,107 @@ namespace MegabonkTogether.Services
             return true;
         }
 
+        /// <summary>
+        /// Returns whether somebody was already charging before this player joined in
+        /// </summary>
+        private bool AddShrineCharger(uint shrineNetplayId, uint playerId)
+        {
+            var chargers = shrineChargingPlayers.GetOrAdd(shrineNetplayId, _ => new List<uint>());
+
+            lock (chargers)
+            {
+                var wasAlreadyCharging = chargers.Count > 0;
+
+                if (!chargers.Contains(playerId))
+                {
+                    chargers.Add(playerId);
+                }
+
+                return wasAlreadyCharging;
+            }
+        }
+
+        private void BroadcastShrineChargerCount(uint shrineNetplayId)
+        {
+            if (!(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            var count = 0;
+            if (shrineChargingPlayers.TryGetValue(shrineNetplayId, out var chargers) && chargers != null)
+            {
+                lock (chargers)
+                {
+                    count = chargers.Count;
+                }
+            }
+
+            IGameNetworkMessage message = new ShrineChargersChanged
+            {
+                ShrineNetplayId = shrineNetplayId,
+                ChargerCount = (byte)Math.Min(count, byte.MaxValue),
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
+            ApplyShrineChargeSpeed(shrineNetplayId, count);
+        }
+
+        private void OnReceivedShrineChargersChanged(ShrineChargersChanged changed)
+        {
+            ApplyShrineChargeSpeed(changed.ShrineNetplayId, changed.ChargerCount);
+        }
+
+        /// <summary>
+        /// Scales the remaining required charge time by how many players stand in the zone.
+        /// The base time is captured the first time we touch a shrine so repeated changes always compute
+        /// from the original value instead of compounding.
+        /// </summary>
+        public void ApplyShrineChargeSpeed(uint shrineNetplayId, int chargerCount)
+        {
+            var perExtraPlayer = ModConfig.ShrineChargeSpeedPerExtraPlayer.Value;
+            if (perExtraPlayer <= 0f)
+            {
+                return;
+            }
+
+            var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(shrineNetplayId);
+            if (spawnedObj == null)
+            {
+                return;
+            }
+
+            var shrine = spawnedObj.GetComponent<ChargeShrine>();
+            if (shrine == null)
+            {
+                return;
+            }
+
+            var dynShrine = DynamicData.For(shrine);
+            var baseChargeTime = dynShrine.Get<float?>("baseChargeTime");
+            if (!baseChargeTime.HasValue)
+            {
+                baseChargeTime = shrine.currentChargeTime;
+                dynShrine.Set("baseChargeTime", baseChargeTime.Value);
+            }
+
+            var extraPlayers = Mathf.Max(0, chargerCount - 1);
+            var speedup = 1f + extraPlayers * perExtraPlayer;
+
+            shrine.currentChargeTime = baseChargeTime.Value / speedup;
+        }
+
         private void OnReceivedStartingToChargingShrine(StartingChargingShrine shrine)
         {
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrine.ShrineNetplayId).Value;
-                shrineChargingPlayers[shrine.ShrineNetplayId] = [shrine.PlayerChargingId];
+                //Add to the set instead of replacing it, same reason as in OnStartingToChargingShrine
+                var wasAlreadyCharging = AddShrineCharger(shrine.ShrineNetplayId, shrine.PlayerChargingId);
 
-                if (chargers != null && chargers.Any())
+                BroadcastShrineChargerCount(shrine.ShrineNetplayId);
+
+                if (wasAlreadyCharging)
                 {
                     return;
                 }
@@ -2859,12 +3008,21 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrineNetplayId).Value;
+            //A stop can arrive without a matching start (level change, reset, dropped packet) and the
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, inside a trigger prefix
+            var stillCharging = false;
+            if (shrineChargingPlayers.TryGetValue(shrineNetplayId, out var chargers) && chargers != null)
+            {
+                lock (chargers)
+                {
+                    chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+                    stillCharging = chargers.Count > 0;
+                }
+            }
 
-            shrineChargingPlayers[shrineNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+            BroadcastShrineChargerCount(shrineNetplayId);
 
-            if (chargers != null && chargers.Any())
+            if (stillCharging)
             {
                 logger.LogInfo("Another player is still charging this shrine. Preventing stop trigger.");
                 return false;
@@ -2880,11 +3038,19 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = shrineChargingPlayers.FirstOrDefault(p => p.Key == shrine.ShrineNetplayId).Value;
-                shrineChargingPlayers[shrine.ShrineNetplayId].Remove(shrine.PlayerChargingId);
+                var stillCharging = false;
+                if (shrineChargingPlayers.TryGetValue(shrine.ShrineNetplayId, out var chargers) && chargers != null)
+                {
+                    lock (chargers)
+                    {
+                        chargers.Remove(shrine.PlayerChargingId);
+                        stillCharging = chargers.Count > 0;
+                    }
+                }
 
-                if (chargers != null && chargers.Any())
+                BroadcastShrineChargerCount(shrine.ShrineNetplayId);
+
+                if (stillCharging)
                 {
                     return;
                 }
@@ -3253,15 +3419,17 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = pylonChargingPlayers.FirstOrDefault(p => p.Key == pylonNetplayId).Value;
-
-            pylonChargingPlayers[pylonNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-            if (chargers != null && chargers.Any())
+            //A stop can arrive without a matching start (level change, reset, dropped packet) and the
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, inside a trigger prefix
+            if (pylonChargingPlayers.TryGetValue(pylonNetplayId, out var chargers) && chargers != null)
             {
-                logger.LogInfo("Another player is still charging this pylon. Preventing stop trigger.");
-                return false;
+                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+
+                if (chargers.Any())
+                {
+                    logger.LogInfo("Another player is still charging this pylon. Preventing stop trigger.");
+                    return false;
+                }
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -3274,13 +3442,14 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = pylonChargingPlayers.FirstOrDefault(p => p.Key == pylon.PylonNetplayId).Value;
-                pylonChargingPlayers[pylon.PylonNetplayId].Remove(pylon.PlayerChargingId);
-
-                if (chargers != null && chargers.Any())
+                if (pylonChargingPlayers.TryGetValue(pylon.PylonNetplayId, out var chargers) && chargers != null)
                 {
-                    return;
+                    chargers.Remove(pylon.PlayerChargingId);
+
+                    if (chargers.Any())
+                    {
+                        return;
+                    }
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(pylon.PylonNetplayId);
@@ -3344,15 +3513,18 @@ namespace MegabonkTogether.Services
                 return false;
             }
 
-            var players = playerManagerService.GetAllPlayers();
-            var chargers = lampsChargingPlayers.FirstOrDefault(p => p.Key == lampNetplayId).Value;
-
-            lampsChargingPlayers[lampNetplayId].Remove(playerManagerService.GetLocalPlayer().ConnectionId);
-
-            if (chargers != null && chargers.Any())
+            //A stop can arrive without a matching start (level change, reset, dropped packet). The
+            //ConcurrentDictionary indexer throws KeyNotFoundException in that case, and this runs inside
+            //the BossLamp.OnTriggerExit prefix, so the lamp would be left half charged
+            if (lampsChargingPlayers.TryGetValue(lampNetplayId, out var chargers) && chargers != null)
             {
-                logger.LogInfo("Another player is still charging this lamp. Preventing stop trigger.");
-                return false;
+                chargers.Remove(playerManagerService.GetLocalPlayer().ConnectionId);
+
+                if (chargers.Any())
+                {
+                    logger.LogInfo("Another player is still charging this lamp. Preventing stop trigger.");
+                    return false;
+                }
             }
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -3365,13 +3537,14 @@ namespace MegabonkTogether.Services
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                var players = playerManagerService.GetAllPlayers();
-                var chargers = lampsChargingPlayers.FirstOrDefault(p => p.Key == lamp.LampNetplayId).Value;
-                lampsChargingPlayers[lamp.LampNetplayId].Remove(lamp.PlayerChargingId);
-
-                if (chargers != null && chargers.Any())
+                if (lampsChargingPlayers.TryGetValue(lamp.LampNetplayId, out var chargers) && chargers != null)
                 {
-                    return;
+                    chargers.Remove(lamp.PlayerChargingId);
+
+                    if (chargers.Any())
+                    {
+                        return;
+                    }
                 }
 
                 var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(lamp.LampNetplayId);
@@ -3681,9 +3854,28 @@ namespace MegabonkTogether.Services
         private void SpawnReviver(Vector3 position, Material[] materials, uint ownerConnectionId, uint reviverId = 0)
         {
             var desertGraves = EffectManager.Instance.desertGraves;
+            if (desertGraves == null || desertGraves.Count == 0)
+            {
+                logger.LogWarning("No desert grave prefab available, cannot spawn a reviver.");
+                return;
+            }
+
+            if (materials == null || materials.Length == 0)
+            {
+                logger.LogWarning("No materials available, cannot spawn a reviver.");
+                return;
+            }
+
             Plugin.CAN_SEND_MESSAGES = false;
-            var desertGraveInstance = GameObject.Instantiate(desertGraves[0], position, Quaternion.Euler(-90, 0, 0));
-            Plugin.CAN_SEND_MESSAGES = true;
+            GameObject desertGraveInstance;
+            try
+            {
+                desertGraveInstance = GameObject.Instantiate(desertGraves[0], position, Quaternion.Euler(-90, 0, 0));
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
             var interactable = desertGraveInstance.GetComponent<InteractableDesertGrave>();
             var chargeFx = GameObject.Instantiate(interactable.chargeFx, desertGraveInstance.transform);
             var explodeFx = GameObject.Instantiate(interactable.explodeFx, desertGraveInstance.transform);
@@ -3725,7 +3917,7 @@ namespace MegabonkTogether.Services
                 SpawnReviver(reviver.Position.ToUnityVector3(), player.GetActiveMaterials(), reviver.OwnerConnectionId, reviver.ReviverId);
 
             }
-            else if (reviver.OwnerConnectionId == playerManagerService.GetLocalPlayer().ConnectionId)
+            else if (reviver.OwnerConnectionId == playerManagerService.GetLocalPlayer()?.ConnectionId)
             {
                 SpawnReviver(reviver.Position.ToUnityVector3(), GameManager.Instance.player.playerRenderer.activeMaterials, reviver.OwnerConnectionId, reviver.ReviverId);
             }
@@ -4253,6 +4445,124 @@ namespace MegabonkTogether.Services
             }
         }
 
+        /// <summary>
+        /// Host side, ticked by NetworkHandler. Broadcasts the authoritative MyTime clocks.
+        /// Sent unreliably on purpose: it is a periodic correction, a lost one is picked up by the next
+        /// </summary>
+        public void SendTimersSynchronization()
+        {
+            if (!ModConfig.SynchronizeTimers.Value)
+            {
+                return;
+            }
+
+            if (!HasNetplaySessionStarted() || !(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            IGameNetworkMessage message = new TimersSynchronized
+            {
+                StageTimer = MyTime.stageTimer,
+                RunTimer = MyTime.runTimer,
+                FinalSwarmTimer = MyTime.finalSwarmTimer,
+                DifficultyTimer = MyTime.difficultyTimer,
+                CryptTimer = MyTime.cryptTimer,
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.Unreliable);
+        }
+
+        /// <summary>
+        /// Only correct once the drift is big enough to matter, otherwise the clock would visibly
+        /// twitch every time a correction lands
+        /// </summary>
+        private const float TIMER_DRIFT_TOLERANCE = 0.75f;
+
+        private void OnReceivedTimersSynchronized(TimersSynchronized timers)
+        {
+            if (!ModConfig.SynchronizeTimers.Value || (IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            ApplyTimerIfDrifted(timers.StageTimer, MyTime.stageTimer, value => MyTime.stageTimer = value);
+            ApplyTimerIfDrifted(timers.RunTimer, MyTime.runTimer, value => MyTime.runTimer = value);
+            ApplyTimerIfDrifted(timers.FinalSwarmTimer, MyTime.finalSwarmTimer, value => MyTime.finalSwarmTimer = value);
+            ApplyTimerIfDrifted(timers.DifficultyTimer, MyTime.difficultyTimer, value => MyTime.difficultyTimer = value);
+            ApplyTimerIfDrifted(timers.CryptTimer, MyTime.cryptTimer, value => MyTime.cryptTimer = value);
+        }
+
+        private static void ApplyTimerIfDrifted(float hostValue, float localValue, Action<float> apply)
+        {
+            if (Mathf.Abs(hostValue - localValue) <= TIMER_DRIFT_TOLERANCE)
+            {
+                return;
+            }
+
+            apply(hostValue);
+        }
+
+        /// <summary>
+        /// Host side. Tells everyone a graveyard boss lamp turned on or went out, so lampCount and with
+        /// it the boss armor stay identical on every client instead of being derived from a locally
+        /// rolled random deactivate timer
+        /// </summary>
+        public void OnBossLampStateChanged(uint lampNetplayId, bool isTurnedOn)
+        {
+            IGameNetworkMessage message = new BossLampStateChanged
+            {
+                LampNetplayId = lampNetplayId,
+                IsTurnedOn = isTurnedOn,
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
+        }
+
+        private void OnReceivedBossLampStateChanged(BossLampStateChanged state)
+        {
+            if (IsServerMode() ?? false)
+            {
+                return; //The host is where this comes from
+            }
+
+            var spawnedObj = spawnedObjectManagerService.GetSpawnedObject(state.LampNetplayId);
+            if (spawnedObj == null)
+            {
+                logger.LogWarning("Lamp object not found in SpawnedObjectManagerService when processing OnReceivedBossLampStateChanged.");
+                return;
+            }
+
+            var lampObj = spawnedObj.GetComponent<BossLamp>();
+            if (lampObj == null)
+            {
+                logger.LogWarning("Lamp component not found on spawned object when processing OnReceivedBossLampStateChanged.");
+                return;
+            }
+
+            if (lampObj.isTurnedOn == state.IsTurnedOn)
+            {
+                return; //Already there, applying it again would move lampCount a second time
+            }
+
+            Plugin.CAN_SEND_MESSAGES = false;
+            try
+            {
+                if (state.IsTurnedOn)
+                {
+                    lampObj.Complete();
+                }
+                else
+                {
+                    lampObj.Deactivate();
+                }
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
+        }
+
         public void OnHatChanged(EHat eHat)
         {
             IGameNetworkMessage message = new HatChanged
@@ -4396,15 +4706,26 @@ namespace MegabonkTogether.Services
 
         public void RewardFinished()
         {
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null)
+            {
+                logger.LogWarning("No local player while finishing a reward, cannot notify the other players.");
+                return;
+            }
+
+            //Claim the encounter we are resolving before evaluating whether everybody is done
+            var round = encounterService.RegisterLocalEncounterFinished();
+
             IGameNetworkMessage message = new EncounterClosed
             {
-                OwnerId = playerManagerService.GetLocalPlayer().ConnectionId,
+                OwnerId = localPlayer.ConnectionId,
+                CompletedCount = round,
             };
 
             var isHost = IsServerMode() ?? false;
             if (isHost)
             {
-                encounterService.AddClosedEncounterForPlayer(playerManagerService.GetLocalPlayer().ConnectionId);
+                encounterService.AddClosedEncounterForPlayer(localPlayer.ConnectionId, round);
 
                 if (encounterService.IsClosable())
                 {
@@ -4420,6 +4741,63 @@ namespace MegabonkTogether.Services
             {
                 udpClientService.SendToHost(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
             }
+        }
+
+        /// <summary>
+        /// Host side watchdog, ticked every frame by NetworkHandler.
+        /// A dropped EncounterClosed / CloseEncounter used to leave every player waiting forever on
+        /// the "Waiting for other player(s) choices..." overlay with no way out but killing the game
+        /// (issues #74, #77, #80, #88).
+        /// The host is the authority here on purpose: if every client closed on its own timer they
+        /// would drift apart instead of staying in sync.
+        /// </summary>
+        public void TickEncounterFailsafe()
+        {
+            if (!HasNetplaySessionStarted() || !IsSharedExperienceEnabled())
+            {
+                return;
+            }
+
+            if (!(IsServerMode() ?? false))
+            {
+                return;
+            }
+
+            var timeout = ModConfig.EncounterFailsafeTimeoutSeconds.Value;
+            if (timeout <= 0f)
+            {
+                return;
+            }
+
+            var uiManager = UiManager.Instance;
+            if (uiManager == null || uiManager.encounterWindows == null)
+            {
+                encounterService.ResetFailsafe();
+                return;
+            }
+
+            if (!uiManager.encounterWindows.encounterInProgress)
+            {
+                encounterService.ResetFailsafe();
+                return;
+            }
+
+            if (!encounterService.HasBeenOpenTooLong(timeout))
+            {
+                return;
+            }
+
+            logger.LogWarning($"Encounter still open after {timeout}s, force closing it for every player (failsafe)");
+
+            encounterService.ResetFailsafe();
+            encounterService.Close();
+
+            IGameNetworkMessage closeMessage = new CloseEncounter
+            {
+            };
+
+            udpClientService.SendToAllClients(closeMessage, LiteNetLib.DeliveryMethod.ReliableOrdered);
+            OnCloseEncounter();
         }
 
         private void OnReceivedCloseEncounter(CloseEncounter close)
@@ -4444,10 +4822,16 @@ namespace MegabonkTogether.Services
 
         public void OnChangeGold(int amount)
         {
+            var localPlayer = playerManagerService.GetLocalPlayer();
+            if (localPlayer == null)
+            {
+                return;
+            }
+
             IGameNetworkMessage message = new GoldChanged
             {
                 Amount = amount,
-                OwnerId = playerManagerService.GetLocalPlayer().ConnectionId
+                OwnerId = localPlayer.ConnectionId
             };
 
             var isHost = IsServerMode() ?? false;
@@ -4464,8 +4848,14 @@ namespace MegabonkTogether.Services
         private void OnReceivedChangeGold(GoldChanged changed)
         {
             Plugin.CAN_SEND_MESSAGES = false;
-            GameManager.Instance.player.inventory.ChangeGold(changed.Amount);
-            Plugin.CAN_SEND_MESSAGES = true;
+            try
+            {
+                GameManager.Instance.player.inventory.ChangeGold(changed.Amount);
+            }
+            finally
+            {
+                Plugin.CAN_SEND_MESSAGES = true;
+            }
         }
     }
 }

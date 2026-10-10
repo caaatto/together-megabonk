@@ -60,6 +60,74 @@ namespace MegabonkTogether.Patches
         }
 
         /// <summary>
+        /// Only the host decides when a lamp turns on. GraveyardBossRoom derives the boss armor from
+        /// lampCount, which LampActivate and LampDeactivate maintain, so letting each client reach that
+        /// state on its own is what leaves the boss shielded for a guest while every lamp looks lit
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(BossLamp.Complete))]
+        public static bool Complete_Prefix(BossLamp __instance)
+        {
+            return GateLampStateChange(__instance, isTurnedOn: true);
+        }
+
+        /// <summary>
+        /// Same for a lamp going out again
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(BossLamp.Deactivate))]
+        public static bool Deactivate_Prefix(BossLamp __instance)
+        {
+            return GateLampStateChange(__instance, isTurnedOn: false);
+        }
+
+        /// <summary>
+        /// The deactivate delay is rolled locally between randomDeactivateTimeMin and Max, so every
+        /// client would pick a different moment for a lamp to go out. The host owns that roll
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(BossLamp.CheckRandomDeactivate))]
+        public static bool CheckRandomDeactivate_Prefix()
+        {
+            if (!synchronizationService.HasNetplaySessionStarted())
+            {
+                return true;
+            }
+
+            return synchronizationService.IsServerMode() ?? false;
+        }
+
+        private static bool GateLampStateChange(BossLamp lamp, bool isTurnedOn)
+        {
+            if (!synchronizationService.HasNetplaySessionStarted())
+            {
+                return true;
+            }
+
+            if (!Plugin.CAN_SEND_MESSAGES)
+            {
+                return true; //We are replaying what the host told us
+            }
+
+            if (!(synchronizationService.IsServerMode() ?? false))
+            {
+                return false; //Wait for the host to say so
+            }
+
+            var lampNetplayId = DynamicData.For(lamp.gameObject).Get<uint?>("netplayId");
+            if (lampNetplayId.HasValue)
+            {
+                synchronizationService.OnBossLampStateChanged(lampNetplayId.Value, isTurnedOn);
+            }
+            else
+            {
+                Plugin.Log.LogWarning("Lamp has no netplay id set!");
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Synchronize stopping charging lamp
         /// </summary>
         [HarmonyPrefix]

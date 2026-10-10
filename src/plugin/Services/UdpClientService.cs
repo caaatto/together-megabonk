@@ -703,6 +703,15 @@ namespace MegabonkTogether.Services
                     case TimerStarted timerStarted:
                         EventManager.OnTimerStarted(timerStarted);
                         break;
+                    case TimersSynchronized timersSynchronized:
+                        EventManager.OnTimersSynchronized(timersSynchronized);
+                        break;
+                    case BossLampStateChanged bossLampStateChanged:
+                        EventManager.OnBossLampStateChanged(bossLampStateChanged);
+                        break;
+                    case ShrineChargersChanged shrineChargersChanged:
+                        EventManager.OnShrineChargersChanged(shrineChargersChanged);
+                        break;
                     case HatChanged hatChanged:
                         EventManager.OnHatChanged(hatChanged);
                         break;
@@ -985,7 +994,7 @@ namespace MegabonkTogether.Services
                         SendToAllClientsExcept(netPeerId, addXp.OwnerId, addXp);
                         break;
                     case EncounterClosed encounterClosed:
-                        encounterService.AddClosedEncounterForPlayer(encounterClosed.OwnerId);
+                        encounterService.AddClosedEncounterForPlayer(encounterClosed.OwnerId, encounterClosed.CompletedCount);
 
                         if (encounterService.IsClosable())
                         {

@@ -43,6 +43,36 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 <details>
 <summary>📋 Click to view full changelog</summary>
 
+### v5.3.0
+
+- 🗽 **Charge shrines get faster with more players**: the mod only ever tracked a single charger per shrine and suppressed every additional trigger, so occupancy could not matter. Tunable with `ShrineChargeSpeedPerExtraPlayer`
+- ⌨️ **No more accidental picks**: button presses are ignored for a moment right after a reward, chest or level up window opens. Movement is unaffected. Tunable with `RewardInputGraceSeconds`
+- 🗺️ **The map works after you die**: the netplayer reveal was switched off whenever the local player could not give input, which includes being dead
+- 👁️ **The death cam no longer follows a dead player**: a dead player's model is hidden, so spectating one showed nothing at all
+- 📡 **Player and lobby updates keep running while your game is paused**: during a pause the whole update stopped, including your own health and inventory record and, on the host, game over detection
+- 💀 **Fixed dying sending you straight to the death screen instead of the death cam**: a player who was not spawned yet when the run started crashed the minimap arrow setup, which silently skipped the spectator death handling and the player count scaling for the whole run
+- 🛡️ **Fixed two more crashes** from following a player who had just disconnected or was not spawned yet
+
+> [!IMPORTANT]
+> This version changes the network format again, so every player in a session needs 5.3.0.
+
+### v5.2.0
+
+- 🔓 **Fixed the permanent soft lock on "Waiting for other player(s) choices..."**: confirmations are now counted per player instead of collected in a set that got cleared after every encounter, so a late confirmation, or one sent by a dead player, can no longer close an encounter somebody is still choosing in
+- 🛡️ **Added a host side failsafe**: if an encounter stays open too long the host closes it for everyone, so a lost packet cannot end the run. Tunable with `EncounterFailsafeTimeoutSeconds` (default 60s, 0 disables it)
+- 📦 **Fixed the soft lock when opening a second chest**: the chest window kept a null open button around, which crashed the game code on the next chest
+- 🧟 **Fixed enemies walking off towards nothing**: target switching crashed whenever a player was not spawned yet, already gone, or dead, and that crash made it retry every single frame for every enemy
+- 🔌 **Fixed silent network death**: a player could stop sending any message for the rest of the run after an error while applying a received one
+- 🔯 **Fixed shrine, pylon and boss lamp charging** crashing when you left the trigger without a matching start, for example after a level change
+- 📊 **Fixed kill counts and progression drifting apart** between players over a long session
+- 🚀 **Less wasted work in per enemy interpolation** when the host falls behind, which is when the frame rate used to collapse
+- 🚪 **Fixed being stuck on "Waiting for other players" when loading a map**: that wait needed at least two players to ever finish, so if everybody else dropped during the load the game stayed paused on that screen with no way out but restarting. It now notices when everyone left and gives up after `LobbyReadyTimeoutSeconds` (45s by default)
+- 💀 **Fixed the graveyard final boss keeping its shield for guests**: lamps turning on and going out is now decided by the host. A lamp goes out after a locally rolled random delay, so every player used to count a different number of lit lamps, and the boss armor is derived from that count
+- ⏱️ **Fixed the clocks drifting apart**: the host now keeps everyone on the same run, stage, swarm, difficulty and crypt timer. They diverged because a shared experience pause lasts a different amount of time for each player, so one player could sit at 00:00 with the final swarm while another still had minutes left. Turn off with `SynchronizeTimers`
+
+> [!IMPORTANT]
+> This version changes the network format, so every player in a session needs 5.2.0.
+
 ### v5.1.0
 
 - 🚀 **More code optimizations one more time !**
@@ -135,7 +165,7 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 
 # Install
 
-This mod has only been developed and tested on windows, probably won't work on other platform (Is the game can even be run on Linux/Mac even ?)
+This mod is developed and tested on Windows. Linux is supported through **Proton** (see [Linux Support](#linux-support-proton--steam-deck)), including cross-play with Windows players. The **native** Linux build of the game does not work and cannot be made to work from this mod, see the section below for why. macOS is untested.
 
 Also this mod was developed for the 1.0.49 version (ok let me rant a bit, it was developed on previous update but Graveyard update broke some major stuff, i was a bit mad but its okay now, i fixed all the stuff), meaning it will probably break when an official major update drop .
 
@@ -190,6 +220,9 @@ If you want to run your own matchmaking/relay server, check the [Self-Hosting Gu
 
 - For some obscure reason, The game crash when loading the map. this is mostly rare and you can just close and restart the game if it ever happen. Dunno why it sometimes crash here ¯\_(ツ)\_/¯
 - Not all the stuff happening in the game are perfectly synchronized, like getting money when you shouldn't or ghost item not spawning or whatever. I will mostly be looking for game breaking bug before looking at those
+- Progression, quests and Steam achievements are not synchronized yet. Saving during netplay is off by default and can be turned on with `AllowSavesDuringNetplay`
+- Frame rate still drops during the late swarms with several players. Some causes are fixed in 5.2.0 but this is not solved
+- Native Linux does not work, see [Linux Support](#linux-support-proton--steam-deck). Use Proton
 
 # Building (Developer)
 
@@ -206,7 +239,28 @@ To target a local server, modify the file `{your game path}/BepInEx/config/Megab
 
 # Linux Support (Proton / Steam Deck)
 
-The mod is compatible with Linux via **Proton**. Native Linux support is currently experimental and unstable due to BepInEx 6 compatibility issues with newer kernels (glibc/CET conflicts).
+The mod is compatible with Linux via **Proton**, which is required rather than merely recommended.
+
+## Why native Linux does not work
+
+The **native** Linux (ELF) build of the game is not supported, and not because of glibc or CET
+conflicts as previously stated here. Il2CppInterop locates IL2CPP's internal runtime functions by
+scanning for byte signatures derived from Windows PE builds. Against the ELF `GameAssembly.so`
+those patterns do not match, so it falls back to substitutes and then dereferences them:
+
+```
+[Warning:Il2CppInterop] Class::Init signatures have been exhausted, using a substitute!
+[Warning:Il2CppInterop] GarbageCollector::RunFinalizer not found, disabling Il2CppObjectPool
+Segmentation fault (core dumped)
+```
+
+Cpp2IL handles the ELF binary fine and all interop assemblies are generated, so the failure is not
+in the preloading step. The segfault happens in the chainloader, **before MegabonkTogether is
+loaded at all**, which is why no change in this mod can work around it. The blocker sits upstream in
+BepInEx's Il2CppInterop.
+
+Thanks to [@PapistProtocol](https://github.com/Fcornaire/megabonk-together/issues/97) for the analysis
+and the core dump that pinned this down.
 
 ## Installation
 

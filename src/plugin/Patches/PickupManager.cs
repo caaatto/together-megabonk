@@ -92,9 +92,10 @@ namespace MegabonkTogether.Patches
                 {
                     if (playerManagerService.IsLocalConnectionId(randomConnectionId.Value))
                     {
-                        dynPickup.Set("ownerId", playerManagerService.GetLocalPlayer().ConnectionId);
+                        //IsLocalConnectionId above already established this is us, no need to look it up again
+                        dynPickup.Set("ownerId", randomConnectionId.Value);
                         pickup.StartFollowingPlayer(GameManager.Instance.player.transform);
-                        synchronizationService.SendPickupFollowingPlayer(playerManagerService.GetLocalPlayer().ConnectionId, pickupId);
+                        synchronizationService.SendPickupFollowingPlayer(randomConnectionId.Value, pickupId);
                         continue;
                     }
                     else

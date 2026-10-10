@@ -34,6 +34,7 @@ namespace MegabonkTogether.Services
         public void SpawnPlayers();
 
         public NetPlayer GetRandomNetPlayer();
+        public IEnumerable<NetPlayer> GetAllSpawnedNetPlayersAlive();
         public void AddProjectileToSpawn(uint connectionId);
         public void AddGetNetplayerPosition(uint connectionId);
         public void AddGetNetplayerPositionRequest(uint connectionId);
@@ -300,16 +301,46 @@ namespace MegabonkTogether.Services
             return [.. spawnedPlayers.Values];
         }
 
+        /// <summary>
+        /// Netplayers that are actually worth looking at: spawned, with a model, and not dead.
+        /// NetPlayer.OnDied hides the model, so following a dead one means staring at a hidden object
+        /// stuck at its last position
+        /// </summary>
+        public IEnumerable<NetPlayer> GetAllSpawnedNetPlayersAlive()
+        {
+            var alive = new List<NetPlayer>();
+
+            foreach (var (connectionId, netPlayer) in spawnedPlayers)
+            {
+                if (netPlayer == null || netPlayer.Model == null)
+                {
+                    continue;
+                }
+
+                if (!players.TryGetValue(connectionId, out var player) || player.Hp == 0)
+                {
+                    continue;
+                }
+
+                alive.Add(netPlayer);
+            }
+
+            return alive;
+        }
+
         public NetPlayer GetRandomNetPlayer()
         {
-            if (spawnedPlayers.Count == 0)
+            //Only ever called to pick a spectate target after the local player died
+            var candidates = GetAllSpawnedNetPlayersAlive() as IList<NetPlayer> ?? GetAllSpawnedNetPlayersAlive().ToList();
+
+            if (candidates.Count == 0)
             {
-                logger.LogWarning("No spawned players available to select.");
+                logger.LogWarning("No living spawned player available to spectate.");
                 return null;
             }
-            var randomIndex = UnityEngine.Random.Range(0, spawnedPlayers.Count);
-            return spawnedPlayers.ElementAt(randomIndex).Value;
 
+            var randomIndex = UnityEngine.Random.Range(0, candidates.Count);
+            return candidates[randomIndex];
         }
 
         public void AddProjectileToSpawn(uint connectionId)
