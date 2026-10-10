@@ -1,0 +1,136 @@
+name: Build and Release
+
+# Every push to main and every pull request builds all packages.
+# A push to main whose <Version> in the plugin csproj has no tag yet also
+# creates the GitHub release for that version with every package attached.
+# Bumping the version is what cuts a release.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "6.0.x"
+
+      - name: Read version
+        run: |
+          VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/plugin/MegabonkTogether.Plugin.csproj)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Version: $VERSION"
+
+      - name: Restore
+        run: |
+          dotnet restore src/plugin/MegabonkTogether.Plugin.csproj
+          dotnet restore src/server/MegabonkTogether.Server.csproj
+
+      # Standard and Proton builds: a MegabonkTogether folder with the dlls,
+      # which is what the in game auto updater downloads (Megabonk-Together-X.Y.Z.zip)
+      - name: Build plugin (Standard and Proton)
+        run: |
+          mkdir -p artifacts/release
+
+          build_plain_zip() {
+            local name="$1"
+            local out="artifacts/$name"
+            local stage="artifacts/stage-$name"
+
+            dotnet build src/plugin/MegabonkTogether.Plugin.csproj -c Release --no-restore -o "$out"
+
+            mkdir -p "$stage/MegabonkTogether"
+            cp "$out"/*.dll "$out"/*.pdb "$stage/MegabonkTogether/"
+            cp src/plugin/CHANGELOG.toml "$stage/MegabonkTogether/"
+            (cd "$stage" && zip -r "$GITHUB_WORKSPACE/artifacts/release/$name-$VERSION.zip" MegabonkTogether)
+          }
+
+          build_plain_zip Megabonk-Together
+
+          export PROTON_BUILD=true
+          build_plain_zip Megabonk-Together-Proton
+
+      - name: Build Thunderstore / r2modman package
+        run: |
+          bash scripts/thunderstore/package.sh
+          cp artifacts/thunderstore/*-MegabonkTogether-"$VERSION".zip artifacts/release/
+
+      - name: Build server (Windows x64)
+        run: |
+          dotnet publish src/server/MegabonkTogether.Server.csproj -c Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/server/MegabonkTogether-Server
+          (cd artifacts/server && zip -r "$GITHUB_WORKSPACE/artifacts/release/MegabonkTogether-Server-win-x64-$VERSION.zip" MegabonkTogether-Server)
+
+      - name: List packages
+        run: ls -la artifacts/release
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: MegabonkTogether-${{ env.VERSION }}
+          path: artifacts/release/*.zip
+
+      - name: Check if this version is already released
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" > /dev/null; then
+            echo "Tag $VERSION already exists, bump <Version> in the plugin csproj to release"
+            echo "RELEASE=false" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write release notes
+        if: env.RELEASE == 'true'
+        run: |
+          python3 - <<'EOF' > release-notes.md
+          import os, tomllib
+
+          version = os.environ["VERSION"]
+          with open("src/plugin/CHANGELOG.toml", encoding="utf-8-sig") as f:
+              changelog = tomllib.loads(f.read())
+
+          changes = changelog.get("version", {}).get(version, {}).get("changes", [])
+          for change in changes:
+              print(f"- {change}")
+          if not changes:
+              print("No changelog entry for this version.")
+
+          print()
+          print("## Install")
+          print()
+          print("- **r2modman**: download the `*-MegabonkTogether-*.zip`, then Settings > Import local mod")
+          print("- **Manual (Windows)**: copy the `MegabonkTogether` folder from `Megabonk-Together-*.zip` into `BepInEx/plugins`")
+          print("- **Proton / Steam Deck**: same, with `Megabonk-Together-Proton-*.zip`")
+          EOF
+          cat release-notes.md
+
+      - name: Create GitHub release
+        if: env.RELEASE == 'true'
+        run: |
+          gh release create "$VERSION" artifacts/release/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

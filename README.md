@@ -177,6 +177,18 @@ Also this mod was developed for the 1.0.49 version (ok let me rant a bit, it was
 
 > Make sure to copy your save somewhere in case you need to restore it back for some reason
 
+## r2modman
+
+- Download `caaatto-MegabonkTogether-X.Y.Z.zip` from the [latest release](https://github.com/caaatto/together-megabonk/releases/latest)
+- In r2modman, pick Megabonk and your profile, then go to Settings > Profile > Import local mod and select the zip
+- If `BepInExPack_IL2CPP` is not in the profile yet, install it from the Online tab
+- Start the game with "Start modded"
+
+> [!IMPORTANT]
+> Remove any other MegabonkTogether package from the profile first. Two copies of the mod in the same profile will conflict.
+
+## Manual
+
 This mod run with [BepInEX 6 Bleeding Edge Build](https://builds.bepinex.dev/projects/bepinex_be) (tested on the current latest #752):
 
 Start by downloading the BepInex loader [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.752](https://builds.bepinex.dev/projects/bepinex_be/752/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.752%2Bdd0655f.zip) in your game directory (Where your Megabonk.exe is). This mean you want to extract BepInEx at something like `{your own path}\steamapps\common\Megabonk`
