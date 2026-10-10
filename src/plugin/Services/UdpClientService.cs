@@ -995,6 +995,7 @@ namespace MegabonkTogether.Services
                         break;
                     case EncounterClosed encounterClosed:
                         encounterService.AddClosedEncounterForPlayer(encounterClosed.OwnerId, encounterClosed.CompletedCount);
+                        Plugin.Log.LogInfo($"Player {encounterClosed.OwnerId} confirmed encounter {encounterClosed.CompletedCount}, {encounterService.DescribeWaitingState()}");
 
                         if (encounterService.IsClosable())
                         {

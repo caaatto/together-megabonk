@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace MegabonkTogether.Services
 {
@@ -31,6 +32,16 @@ namespace MegabonkTogether.Services
         /// </summary>
         public bool HasBeenOpenTooLong(float timeoutSeconds);
         public void ResetFailsafe();
+
+        /// <summary>
+        /// Whether the local player is done with the current encounter and only waits for the others
+        /// </summary>
+        public bool IsWaitingForOthers();
+
+        /// <summary>
+        /// Who has not confirmed the encounter the local player is resolving, for logging
+        /// </summary>
+        public string DescribeWaitingState();
 
         /// <summary>
         /// Session level reset, every player has to start counting from the same place
@@ -153,6 +164,26 @@ namespace MegabonkTogether.Services
         public void ResetFailsafe()
         {
             openedAtRealtime = null;
+        }
+
+        public bool IsWaitingForOthers()
+        {
+            return localHasFinishedCurrentRound;
+        }
+
+        public string DescribeWaitingState()
+        {
+            var round = CurrentRound;
+            var localPlayer = playerManagerService.GetLocalPlayer();
+
+            var missing = playerManagerService.GetAllPlayers()
+                .Where(p => p != null && p.ConnectionId != localPlayer?.ConnectionId)
+                .Where(p => !completedCountPerPlayer.TryGetValue(p.ConnectionId, out var completed) || completed < round)
+                .Select(p => completedCountPerPlayer.TryGetValue(p.ConnectionId, out var completed)
+                    ? $"{p.ConnectionId} (at {completed})"
+                    : $"{p.ConnectionId} (none)");
+
+            return $"round {round}, local finished: {localHasFinishedCurrentRound}, not confirmed: [{string.Join(", ", missing)}]";
         }
 
         public void Reset()
