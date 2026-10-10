@@ -17,11 +17,17 @@ namespace MegabonkTogether.Services
         public KeyValuePair<uint, Pickup> GetPickupByReference(Pickup pickup);
         public Pickup GetSpawnedPickupById(uint id);
         public void RemoveSpawnedPickupById(uint id);
+
+        /// <summary>
+        /// Whether this pickup existed in the current level and is gone, picked up by somebody
+        /// </summary>
+        public bool WasRemoved(uint id);
         public void ResetForNextLevel();
     }
     internal class PickupManagerService : IPickupManagerService
     {
         private readonly ConcurrentDictionary<uint, Pickup> spawnedPickups = [];
+        private readonly ConcurrentDictionary<uint, byte> removedPickupIds = [];
         private uint currentPickupId = 0; //TODO: concurrency?
 
         public IEnumerable<PickupModel> GetAllPickups()
@@ -86,10 +92,17 @@ namespace MegabonkTogether.Services
                 return;
             }
 
+            removedPickupIds.TryAdd(id, 0);
+
             if (pickup.ePickup == EPickup.Xp) //Properly cleanup XP pickups
             {
                 PickupManager.Instance.xpList.RemovePickup(pickup);
             }
+        }
+
+        public bool WasRemoved(uint id)
+        {
+            return removedPickupIds.ContainsKey(id);
         }
 
         public IEnumerable<(uint, Pickup)> GetAllPickupXp()
@@ -105,6 +118,7 @@ namespace MegabonkTogether.Services
             currentPickupId = 0;
             //spawnedPickups.Select(kv => kv.Value).ToList().ForEach(p => GameObject.Destroy(p.gameObject));
             spawnedPickups.Clear();
+            removedPickupIds.Clear();
         }
     }
 }

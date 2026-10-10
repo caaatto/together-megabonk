@@ -158,6 +158,11 @@ namespace MegabonkTogether.Services
         private readonly ConcurrentBag<SpawnedObjectInCrypt> toUpdate = [];
         private readonly ConcurrentQueue<SpawnedEnemy> pendingEnemySpawns = new();
         private readonly HashSet<uint> enemiesDiedBeforeSpawn = [];
+
+        /// <summary>
+        /// Host side: pickups a client asked for that the host does not know, and who got them
+        /// </summary>
+        private readonly ConcurrentDictionary<uint, uint> unknownPickupOwners = new();
         private readonly Dictionary<EEnemy, Material> clonedExtraEnemyMaterials = [];
         private Coroutine newObjectToSpawnRoutine;
         private Coroutine pendingEnemySpawnRoutine;
@@ -772,6 +777,7 @@ namespace MegabonkTogether.Services
 
             pendingEnemySpawns.Clear();
             enemiesDiedBeforeSpawn.Clear();
+            unknownPickupOwners.Clear();
             Patches.Enemies.EnemyPatch.EnemiesDistanceThrottler.ClearAll();
 
             Plugin.Instance.NetPlayersDisplayer.ResetCards();
@@ -1783,7 +1789,13 @@ namespace MegabonkTogether.Services
 
             var netplayId = pickupManagerService.AddSpawnedPickup(pickup);
 
-            DynamicData.For(pickup).Set("pickupId", netplayId);
+            //Pickups are pooled. One that was despawned without going through ApplyPickup (level change, xp
+            //merge) still carries the ownerId of its last use, and the host then hands the new pickup to that
+            //player: it flies to somebody else, or nowhere, for everyone who tries to pick it up. Clients
+            //already clear it in OnReceivedSpawnedPickup
+            var dynPickup = DynamicData.For(pickup);
+            dynPickup.Data.Clear();
+            dynPickup.Set("pickupId", netplayId);
 
             IGameNetworkMessage message = new SpawnedPickup
             {
@@ -2015,7 +2027,7 @@ namespace MegabonkTogether.Services
             var pickup = pickupManagerService.GetSpawnedPickupById(pickupId);
             if (pickup == null)
             {
-                logger.LogWarning($"Pickup {pickupId} not found in PickupManagerService when processing HandleWantToStartFollowingPickup.");
+                AnswerUnknownPickup(ownerId, pickupId);
                 return;
             }
 
@@ -2045,6 +2057,34 @@ namespace MegabonkTogether.Services
 
             udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
             OnReceivedPickupFollowingPlayer((PickupFollowingPlayer)message);
+        }
+
+        /// <summary>
+        /// The requesting client marks the pickup as sent and then waits for the host to name an owner. Not
+        /// answering left that pickup locked for that player for good, and once the host lost track of a
+        /// level's pickups that was every pickup, which reads as "cannot pick anything up anymore".
+        /// A pickup the host never knew cannot be contested on the host, so the first one to ask gets it.
+        /// One that was already picked up is left alone: its PickupApplied is on its way to everybody
+        /// </summary>
+        private void AnswerUnknownPickup(uint requesterId, uint pickupId)
+        {
+            if (pickupId == 0 || pickupManagerService.WasRemoved(pickupId))
+            {
+                logger.LogInfo($"Pickup {pickupId} asked for by {requesterId} was already picked up.");
+                return;
+            }
+
+            var owner = unknownPickupOwners.GetOrAdd(pickupId, requesterId);
+
+            logger.LogWarning($"Pickup {pickupId} asked for by {requesterId} is unknown to the host, giving it to {owner}.");
+
+            IGameNetworkMessage message = new PickupFollowingPlayer
+            {
+                PickupId = pickupId,
+                PlayerId = owner
+            };
+
+            udpClientService.SendToAllClients(message, LiteNetLib.DeliveryMethod.ReliableOrdered);
         }
 
         private void OnReceivedWantToStartFollowingPickup(WantToStartFollowingPickup pickupMessage)
