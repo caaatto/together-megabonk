@@ -4715,6 +4715,7 @@ namespace MegabonkTogether.Services
 
             //Claim the encounter we are resolving before evaluating whether everybody is done
             var round = encounterService.RegisterLocalEncounterFinished();
+            logger.LogInfo($"Finished encounter {round} locally, {encounterService.DescribeWaitingState()}");
 
             IGameNetworkMessage message = new EncounterClosed
             {
@@ -4776,7 +4777,10 @@ namespace MegabonkTogether.Services
                 return;
             }
 
-            if (!uiManager.encounterWindows.encounterInProgress)
+            //Waiting without an open window is just as stuck: a host that is dead, cannot afford the chest or
+            //otherwise skips its own window calls RewardFinished directly and sits on the paused
+            //"Waiting for other player(s) choices..." screen with encounterInProgress false
+            if (!uiManager.encounterWindows.encounterInProgress && !encounterService.IsWaitingForOthers())
             {
                 encounterService.ResetFailsafe();
                 return;
@@ -4787,7 +4791,8 @@ namespace MegabonkTogether.Services
                 return;
             }
 
-            logger.LogWarning($"Encounter still open after {timeout}s, force closing it for every player (failsafe)");
+            logger.LogWarning($"Encounter still open after {timeout}s, force closing it for every player (failsafe). " +
+                $"window open: {uiManager.encounterWindows.encounterInProgress}, {encounterService.DescribeWaitingState()}");
 
             encounterService.ResetFailsafe();
             encounterService.Close();
