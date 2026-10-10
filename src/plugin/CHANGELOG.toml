@@ -14,6 +14,7 @@ changes = [
     "The death cam no longer follows a dead player. A dead player's model is hidden, so spectating one showed nothing at all.",
     "Player and lobby updates keep being sent while your own game is paused. Everything in that update stopped during a pause, including your own health and inventory record and, on the host, game over detection.",
     "Fixed two more crashes from following a player who had just disconnected or was not spawned yet.",
+    "Fixed dying sending you straight to the death screen instead of the death cam. A player who was not spawned yet when the run started crashed the minimap arrow setup, which silently skipped the spectator death handling and the player count scaling for the whole run.",
 ]
 
 [version."5.2.0"]

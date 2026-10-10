@@ -45,15 +45,16 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 
 ### v5.3.0
 
-- 🗽 **Shrines laden schneller mit mehr Spielern**: der Mod kannte pro Shrine nur einen einzigen Charger und unterdrueckte jeden weiteren Trigger, es konnte also gar nicht skalieren. Regelbar mit `ShrineChargeSpeedPerExtraPlayer`
-- ⌨️ **Kein versehentliches Auswaehlen mehr**: direkt nach dem Oeffnen eines Reward-, Chest- oder Level-Up-Fensters werden Tastendruecke kurz ignoriert. Bewegung bleibt unberuehrt. Regelbar mit `RewardInputGraceSeconds`
-- 🗺️ **Karte funktioniert nach dem Tod**: die Netplayer-Aufdeckung war abgeschaltet, sobald der lokale Spieler keine Eingabe machen konnte, also auch im Tod
-- 👁️ **Death-Cam folgt keinem Toten mehr**: das Modell eines toten Spielers ist versteckt, man sah also nichts
-- 📡 **Spieler- und Lobby-Updates laufen auch bei pausiertem Spiel**: waehrend einer Pause stand der komplette Update, inklusive eigener Health- und Inventar-Daten und, beim Host, der Game-Over-Erkennung
-- 🛡️ **Zwei weitere Abstuerze** beim Folgen eines Spielers, der gerade weg war oder noch nicht gespawnt
+- 🗽 **Charge shrines get faster with more players**: the mod only ever tracked a single charger per shrine and suppressed every additional trigger, so occupancy could not matter. Tunable with `ShrineChargeSpeedPerExtraPlayer`
+- ⌨️ **No more accidental picks**: button presses are ignored for a moment right after a reward, chest or level up window opens. Movement is unaffected. Tunable with `RewardInputGraceSeconds`
+- 🗺️ **The map works after you die**: the netplayer reveal was switched off whenever the local player could not give input, which includes being dead
+- 👁️ **The death cam no longer follows a dead player**: a dead player's model is hidden, so spectating one showed nothing at all
+- 📡 **Player and lobby updates keep running while your game is paused**: during a pause the whole update stopped, including your own health and inventory record and, on the host, game over detection
+- 💀 **Fixed dying sending you straight to the death screen instead of the death cam**: a player who was not spawned yet when the run started crashed the minimap arrow setup, which silently skipped the spectator death handling and the player count scaling for the whole run
+- 🛡️ **Fixed two more crashes** from following a player who had just disconnected or was not spawned yet
 
 > [!IMPORTANT]
-> Diese Version aendert erneut das Netzwerkformat, alle Spieler brauchen 5.3.0.
+> This version changes the network format again, so every player in a session needs 5.3.0.
 
 ### v5.2.0
 
