@@ -43,6 +43,12 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 <details>
 <summary>📋 Click to view full changelog</summary>
 
+### v5.3.1
+
+- 🏷️ **Now called Together We Bonk**: the repo moved to `caaatto/together-we-bonk` and the r2modman package is now `caaatto-TogetherWeBonk`. If you imported `caaatto-MegabonkTogether` before, remove it from your profile first
+- 🔓 **Fixed the host staying stuck on "Waiting for other player(s) choices..."** when it skipped its own reward window, for example while dead or when it could not afford the chest. The encounter failsafe now frees that case too
+- 📝 **More logging** around shared experience encounters and charge shrines, to track down the remaining hangs. Please send your `LogOutput.log` if it still happens
+
 ### v5.3.0
 
 - 🗽 **Charge shrines get faster with more players**: the mod only ever tracked a single charger per shrine and suppressed every additional trigger, so occupancy could not matter. Tunable with `ShrineChargeSpeedPerExtraPlayer`
