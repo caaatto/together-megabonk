@@ -8,6 +8,7 @@ using MegabonkTogether.Patches.Enemies;
 using MegabonkTogether.Scripts.Button;
 using MegabonkTogether.Services;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections;
 using System.Linq;
 using System.Threading.Tasks;
 using TextCopy;
@@ -38,6 +39,12 @@ namespace MegabonkTogether.Patches
         [HarmonyPatch(nameof(WindowManager.WindowOpened))]
         public static void WindowOpened_Postfix(Window newWindow)
         {
+            if (newWindow.name == "Menu" && Plugin.Instance.NetworkHandler.IsReturningToLobby)
+            {
+                ReturnToLobby();
+                return;
+            }
+
             if (newWindow.name == "Menu")
             {
                 EnemyPatch.EnemiesDistanceThrottler.ClearAll();
@@ -85,6 +92,9 @@ namespace MegabonkTogether.Patches
 
             if (newWindow.name == "W_Character")
             {
+                //Leaving the character menu for the main menu from here on means leaving the session
+                Plugin.Instance.NetworkHandler.OnBackInLobby();
+
                 if (Plugin.Instance.Mode.Mode == NetworkModeType.Friendlies)
                 {
                     var mainMenu = Plugin.Instance.GetMainMenu();
@@ -97,6 +107,57 @@ namespace MegabonkTogether.Patches
                 {
                     DestroyFriendliesInfoDisplay();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Everyone died. The death screen leads to the main menu, which used to reset the networking and
+        /// end the session, so playing again meant a new room code and everybody joining again.
+        /// Same clean up as for the main menu, minus the networking, then straight back to the character menu
+        /// </summary>
+        private static void ReturnToLobby()
+        {
+            Plugin.Log.LogInfo("Game over, back to the lobby with the same players");
+
+            EnemyPatch.EnemiesDistanceThrottler.ClearAll();
+            Plugin.Instance.NetworkHandler.ResetForNextRun();
+            Plugin.Instance.NetPlayersDisplayer.ResetCards();
+            Plugin.Instance.HideModal();
+            Plugin.Instance.ResetWorldSize();
+            Plugin.Instance.CameraSwitcher.ResetToLocalPlayer();
+            Plugin.Instance.ClearPrefabs();
+            Plugin.Instance.RestoreDeath(false);
+            Plugin.Instance.IS_HOST_READY = false;
+
+            DestroyFriendliesInfoDisplay();
+
+            if (SpawnPlayerPortalPatches.WaitForLobbyCoroutine != null)
+            {
+                CoroutineRunner.Instance.Stop(SpawnPlayerPortalPatches.WaitForLobbyCoroutine);
+            }
+
+            //Not from inside WindowOpened, the menu is still being opened
+            CoroutineRunner.Instance.Run(OpenCharacterMenuNextFrame());
+        }
+
+        private static IEnumerator OpenCharacterMenuNextFrame()
+        {
+            yield return null;
+
+            var mainMenu = Plugin.Instance.GetMainMenu();
+            if (mainMenu == null)
+            {
+                Plugin.Log.LogWarning("No main menu to go back to the lobby from");
+                yield break;
+            }
+
+            mainMenu.GoToCharacterSelection();
+
+            var characterMenu = WindowManager.activeWindow as CharacterMenu;
+            if (characterMenu != null)
+            {
+                characterMenu.selectedButton = characterMenu.characterButtons[0];
+                characterMenu.b_confirm.SetInteractable(false);
             }
         }
 

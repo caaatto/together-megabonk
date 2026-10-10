@@ -77,6 +77,11 @@ namespace MegabonkTogether.Services
 
         public void Reset();
 
+        /// <summary>
+        /// Back to the lobby after a game over: forgets the run, keeps the session and its players
+        /// </summary>
+        public void ResetForNextRun();
+
         public bool IsLoading();
 
         public void OnSpawnedEnemy(Enemy enemy, EEnemy enemyName, Vector3 position, int waveNumber, bool forceSpawn, EEnemyFlag flag, bool canBeElite, float extraSizeMultiplier);
@@ -291,6 +296,18 @@ namespace MegabonkTogether.Services
 
         public void Reset()
         {
+            ResetRunState();
+            playerManagerService.Reset();
+        }
+
+        public void ResetForNextRun()
+        {
+            ResetRunState();
+            playerManagerService.ResetForNextRun();
+        }
+
+        private void ResetRunState()
+        {
             currentState = State.None;
             toSpawns.Clear();
             toUpdate.Clear();
@@ -303,7 +320,6 @@ namespace MegabonkTogether.Services
             cancellationTokenSource = new CancellationTokenSource();
             cancellationToken = cancellationTokenSource.Token;
             PrepareForNextLevel();
-            playerManagerService.Reset();
             enemyManagerService.ResetReviverSpawnCounts();
             encounterService.Reset();
             trackerService.Reset();
@@ -658,6 +674,7 @@ namespace MegabonkTogether.Services
                     PickupManager.maxPowerupsOnMap = 1000;
 
                     currentState = State.Loading;
+                    playerManagerService.ResetPlayersForNewRun();
                     break;
                 case GameEvent.Ready:
                     if (currentState == State.Ready)
@@ -3749,8 +3766,15 @@ namespace MegabonkTogether.Services
 
         private void OnReceivedGameOver(GameOver over)
         {
+            if (currentState == State.GameOver)
+            {
+                return; //Advancing the seed twice would put this player on other maps than everybody else
+            }
+
             udpClientService.GameOver();
+            playerManagerService.AdvanceSeedForNextRun();
             TransitionToState(GameEvent.GameOver);
+            Plugin.Instance.NetworkHandler.OnGameOver();
         }
 
         public void OnPlayerDied()
