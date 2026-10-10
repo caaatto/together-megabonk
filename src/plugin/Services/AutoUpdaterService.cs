@@ -55,8 +55,8 @@ namespace MegabonkTogether.Common
         private const string UPDATE_FILE_PREFIX = ".update_download_";
         private static readonly TimeSpan UPDATE_CHECK_COOLDOWN = TimeSpan.FromMinutes(5);
 
-        private const string GITHUB_OWNER = "Fcornaire";
-        private const string GITHUB_REPO = "megabonk-together";
+        private const string GITHUB_OWNER = "caaatto";
+        private const string GITHUB_REPO = "together-megabonk";
         private string currentVersion;
         private string pluginPath;
         private ManualLogSource logger;
