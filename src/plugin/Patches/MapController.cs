@@ -141,13 +141,15 @@ namespace MegabonkTogether.Patches
         }
 
         /// <summary>
-        /// Prevent restarting run in netplay session
+        /// Prevent restarting run in netplay session.
+        /// Also after the game over: the restart button sits on the death screen and the session now outlives
+        /// the run, so a restart there would start a run alone while still connected to everybody else
         /// </summary>
         [HarmonyPrefix]
         [HarmonyPatch(nameof(MapController.RestartRun))]
         public static bool RestartRun_Prefix()
         {
-            if (!synchronizationService.HasNetplaySessionStarted())
+            if (!synchronizationService.HasNetplaySessionStarted() && !Plugin.Instance.NetworkHandler.IsReturningToLobby)
             {
                 return true;
             }

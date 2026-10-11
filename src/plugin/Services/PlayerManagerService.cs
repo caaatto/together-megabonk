@@ -57,6 +57,22 @@ namespace MegabonkTogether.Services
         public void Disconnect(uint connectionId);
         public void Reset();
 
+        /// <summary>
+        /// Back to the lobby after a game over: keeps the players and who is who, drops what the run left behind
+        /// </summary>
+        public void ResetForNextRun();
+
+        /// <summary>
+        /// Every player starts a run alive and not loaded yet. Without this a second run in the same session
+        /// starts with everybody still at 0 Hp from the game over, and still marked ready from the last load
+        /// </summary>
+        public void ResetPlayersForNewRun();
+
+        /// <summary>
+        /// Moves every player to the same new seed, so the next run in the session does not replay the same maps
+        /// </summary>
+        public void AdvanceSeedForNextRun();
+
         public void OnSelectedCharacterSet();
         public bool HasSelectedCharacter();
         public bool IsLocalConnectionId(uint ownerId);
@@ -553,6 +569,54 @@ namespace MegabonkTogether.Services
             isLocalPlayerSet = false;
             hasSelectedCharacter = false;
             seed = 0;
+        }
+
+        public void ResetForNextRun()
+        {
+            //The game scene is usually gone already, which destroyed these objects. Go one by one so a dead
+            //reference does not stop the rest, Reset() logged exactly that error after every game over
+            foreach (var spawned in spawnedPlayers.Values.ToList())
+            {
+                try
+                {
+                    if (spawned != null && spawned.gameObject != null)
+                    {
+                        GameObject.Destroy(spawned.gameObject);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"Could not destroy a net player from the last run: {ex.Message}");
+                }
+            }
+
+            spawnedPlayers.Clear();
+            projectileToSpawnQueue.Clear();
+            getNetplayerPositionQueue.Clear();
+            getNetplayerPositionRequestQueue.Clear();
+            playerInventories.ToList().ForEach(kv => kv.Value.Cleanup());
+            playerInventories.Clear();
+            hasSelectedCharacter = false;
+
+            ResetPlayersForNewRun();
+        }
+
+        public void ResetPlayersForNewRun()
+        {
+            foreach (var player in players.Values)
+            {
+                player.Hp = 100;
+                player.MaxHp = 100;
+                player.Shield = 0;
+                player.MaxShield = 0;
+                player.IsReady = false;
+                player.Inventory = new();
+            }
+        }
+
+        public void AdvanceSeedForNextRun()
+        {
+            seed = unchecked(seed * 1103515245 + 12345);
         }
 
         public void SetSeed(int seed)

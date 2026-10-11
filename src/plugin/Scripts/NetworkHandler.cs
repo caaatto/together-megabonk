@@ -41,6 +41,7 @@ namespace MegabonkTogether.Scripts
 
         private bool isHost = false;
         private bool isGameStarted = false;
+        private bool isReturningToLobby = false;
 
         private IUdpClientService udpClientService;
         private ISynchronizationService synchronizationService;
@@ -55,6 +56,12 @@ namespace MegabonkTogether.Scripts
         public bool IsNetworkInterruptedStatus => IsNetworkInterrupted;
 
         public bool IsHost => isHost;
+
+        /// <summary>
+        /// Set from the game over until the character menu opens again: the main menu that shows up in
+        /// between must not tear the session down
+        /// </summary>
+        public bool IsReturningToLobby => isReturningToLobby;
 
         public void Awake()
         {
@@ -73,6 +80,40 @@ namespace MegabonkTogether.Scripts
         private void OnGameStarted()
         {
             isGameStarted = true;
+        }
+
+        public void OnGameOver()
+        {
+            isGameStarted = false;
+            isReturningToLobby = true;
+        }
+
+        public void OnBackInLobby()
+        {
+            isReturningToLobby = false;
+        }
+
+        /// <summary>
+        /// Everyone died: keep the connections, the matchmaker lobby and the players, forget the run
+        /// </summary>
+        public void ResetForNextRun()
+        {
+            isGameStarted = false;
+            lobbyUpdateAccumulator = 0f;
+            enemyUpdateAccumulator = 0f;
+            projectileUpdateAccumulator = 0f;
+            timerSyncAccumulator = 0f;
+            tumbleWeedUpdateAccumulator = 0f;
+
+            try
+            {
+                synchronizationService?.ResetForNextRun();
+                udpClientService?.ResetForNextRun();
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogWarning($"Error resetting for the next run: {ex}");
+            }
         }
 
         public void Update()
@@ -212,6 +253,7 @@ namespace MegabonkTogether.Scripts
 
         public void ResetNetworking()
         {
+            isReturningToLobby = false;
             isConnectedToMatchMaker = null;
             Plugin.Instance.Mode = new();
             isHost = false;

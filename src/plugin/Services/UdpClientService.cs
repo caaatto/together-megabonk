@@ -60,6 +60,11 @@ namespace MegabonkTogether.Services
         public void Reset();
         public void GameOver();
 
+        /// <summary>
+        /// Back to the lobby after a game over, keeping every connection
+        /// </summary>
+        public void ResetForNextRun();
+
         public int GetNetPeerCount();
         public bool AreAllPeersReady();
         public int GetCurrentReadyPeersCount();
@@ -1047,6 +1052,23 @@ namespace MegabonkTogether.Services
         public void GameOver()
         {
             isGameOver = true;
+
+            //Everybody picks a character again for the next run. Cleared here and not when the menu opens:
+            //a client can be back in the lobby and pick before the host has even left the death screen
+            foreach (var peer in gamePeersIntroduced.Values)
+            {
+                peer.HasSelected = false;
+            }
+
+            foreach (var peer in gamePeersIntroducedByRelay.Values)
+            {
+                peer.HasSelected = false;
+            }
+        }
+
+        public void ResetForNextRun()
+        {
+            isGameOver = false;
         }
 
         private void OnLobbyUpdate(LobbyUpdates lobbyUpdate) //TODO: move to synchronizationService

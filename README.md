@@ -43,6 +43,16 @@ More info at [Notable Network Changes](./NETPLAY_CHANGES.md)
 <details>
 <summary>📋 Click to view full changelog</summary>
 
+### v5.4.0
+
+- 🔁 **The session survives a game over**: when everybody is dead, leaving the death screen takes every player back to the character menu with the same players still connected, and the host just starts the next run. No new room code, nobody has to join again. Every run in a session gets a new seed, so the maps are different each time
+- 🚪 **Leaving after a game over**: go back from the character menu to the main menu
+- ⛔ **Restart on the death screen is blocked during a session**, it would have started a run alone while still connected to everybody else
+- 🧲 **Fixed players other than the host no longer being able to pick anything up** after a while, mostly from the second stage on. The host ignored requests for pickups it had lost track of, which locked that pickup for the player who asked, and reused pickups kept the owner of their previous use, so they flew to somebody else
+
+> [!IMPORTANT]
+> Every player needs 5.4.0. An older player still leaves the session after a game over and would get different maps.
+
 ### v5.3.1
 
 - 🏷️ **Now called Together We Bonk**: the repo moved to `caaatto/together-we-bonk` and the r2modman package is now `caaatto-TogetherWeBonk`. If you imported `caaatto-MegabonkTogether` before, remove it from your profile first
